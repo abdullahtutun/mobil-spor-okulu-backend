@@ -146,6 +146,9 @@ Supabase stays production until S17, so schema changes keep being written
 as migrations in `../mobil_spor_okulu/supabase/migrations/` and applied to
 Supabase there. The baseline (dump of 2026-11-23) already contains every
 management migration **up to and including `20261027_app_min_versions.sql`**.
+`0008_parent_email_change.sql` (= `20261123_parent_email_change.sql`) is
+imported but **not yet live**: its objects are in `NOT_YET_LIVE` /
+`NOT_YET_LIVE_FINGERPRINT` of `test/schema.e2e-spec.ts`.
 **Every newer management migration is carried over here**:
 
 ```bash
@@ -298,6 +301,11 @@ npm run db:migrate && npm run test:e2e
   decide; service_role only for `schoolBrand` and `delete_own_account`.
   Auth users only through `AuthAdminService`; account deletion is
   `delete_own_account` (tombstone), never `deleteUser`.
+- A parent's e-mail change keeps the **same** auth user (20261123):
+  profile + links, `reset_parent_login_email` and the invite
+  (`AuthAdminService.reinviteWithin`) run in one transaction via
+  `DbContextService.switchRole`; the mail leaves before commit, so any failure
+  changes nothing.
 
 ## Docker on this Mac (colima)
 

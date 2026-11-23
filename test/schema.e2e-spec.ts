@@ -33,7 +33,21 @@ const LIVE = {
   buckets: 2,
 } as const;
 
-const NOT_YET_LIVE: Partial<Record<keyof typeof LIVE, number>> = {};
+const NOT_YET_LIVE: Partial<Record<keyof typeof LIVE, number>> = {
+  // 0008_parent_email_change (yönetim 20261123): reset_parent_login_email.
+  functions: 1,
+};
+
+/**
+ * Canlıya henüz uygulanmamış migration'ların değiştirdiği parmak izleri:
+ * yerelde alınmış değer (canlıya uygulanınca canlıda aynı çıkmalı —
+ * `scripts/schema-fingerprint.sql`'i canlıda salt okunur çalıştırıp
+ * karşılaştır, sonra `LIVE_FINGERPRINT`'e taşı ve bunu boşalt).
+ */
+const NOT_YET_LIVE_FINGERPRINT: Partial<Record<string, string>> = {
+  // 0008_parent_email_change (yönetim 20261123)
+  fn: 'c31f6c337e3a67bc1b05f9d127a7ed89',
+};
 
 /**
  * Yalnızca yeni backend'de olan, canlıya hiç gitmeyecek nesneler: S07'nin
@@ -150,9 +164,10 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
         'utf8',
       );
       const { rows } = await client.query<{ k: string; md5: string }>(sql);
-      expect(Object.fromEntries(rows.map((r) => [r.k, r.md5]))).toEqual(
-        LIVE_FINGERPRINT,
-      );
+      expect(Object.fromEntries(rows.map((r) => [r.k, r.md5]))).toEqual({
+        ...LIVE_FINGERPRINT,
+        ...NOT_YET_LIVE_FINGERPRINT,
+      });
     });
 
     it('sıralama canlıdaki gibi ICU en-US, saat dilimi UTC', async () => {

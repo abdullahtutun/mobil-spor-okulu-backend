@@ -89,11 +89,12 @@ yanlıştan sonra doğru şifre de 429 `rate_limited`, hesap silinmez).
   alındı.
 
 **Bilinen eksikler / farklar**
-- **Canlıdaki hata (bire bir taşındı, soru açık):** bağı olan velinin
-  e-postası değişince eski auth hesabı FK (`profile_branch_links`,
-  `parent_athlete_links` → `profiles`, NO ACTION) yüzünden silinemiyor; yanıt
-  400, yeni adrese davet gitmiş ve yeni hesap bağlarıyla kalıyor, eski hesap
-  da duruyor. Testte sabitlendi (`docs/api/functions.md`).
+- **E-posta değişikliği düzeltildi (kullanıcı kararı, aynı gün):** eski
+  hesabı silmek yerine aynı hesabın adresi değişir (`reset_parent_login_email`,
+  migration 0008 = yönetim `20261123_parent_email_change.sql`), hesap davetli
+  hâle döner, yeni adrese davet gider; backend'de hepsi tek transaction.
+  Yönetim reposunda da düzeltildi (dağıtım kullanıcıda). Ayrıntı:
+  PROGRESS.md → "S09 düzeltmesi".
 - Bilinçli farklar: veli yazımları (profil + şube + sporcu) tek transaction
   (Edge'de ayrı istekler, biri düşerse öncekiler kalıyordu); gövde tip
   denetimi; okulsuz çağıran okul denetiminde de reddedilir; hesap silmede

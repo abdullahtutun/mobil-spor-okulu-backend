@@ -11,7 +11,7 @@ export type DbRole = (typeof DB_ROLES)[number];
  * auth.users / sessions / refresh_tokens. Hiçbir token bu role çözülmez.
  */
 export const AUTH_SERVICE_ROLE = 'auth_service';
-type ContextRole = DbRole | typeof AUTH_SERVICE_ROLE;
+export type ContextRole = DbRole | typeof AUTH_SERVICE_ROLE;
 
 /** `request.jwt.claims`'e yazılan JWT yükü (Supabase'in claim adlarıyla). */
 export type JwtClaims = Record<string, unknown> & {
@@ -119,6 +119,23 @@ export class DbContextService {
     } finally {
       client.release(broken);
     }
+  }
+
+  /**
+   * Açık bir `run` transaction'ının içinde rolü değiştirir (`set local role`).
+   * Yalnızca bir işin parçaları farklı rollerle ama **tek transaction'da**
+   * yapılmak zorundaysa (ör. update-parent: çağıranın rolüyle profil, sonra
+   * service_role ile hesap, sonra auth_service ile davet token'ı — biri
+   * düşerse hepsi geri alınır). Claims değişmez.
+   */
+  async switchRole(client: PoolClient, role: ContextRole): Promise<void> {
+    if (
+      !(DB_ROLES as readonly string[]).includes(role) &&
+      role !== AUTH_SERVICE_ROLE
+    ) {
+      throw new Error(`Bilinmeyen veritabanı rolü: ${String(role)}`);
+    }
+    await client.query(`set local role ${role}`);
   }
 
   /** Oturumsuz ya da sunucunun kendi işi. */

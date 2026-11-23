@@ -90,22 +90,23 @@ rol 8 ve aynı okul olmalı) → e-posta değişti mi (büyük/küçük harf duy
 
 - **Aynı**: profil güncellemesi (`profiles_update_policy`) + şube ve sporcu
   bağları, tek transaction.
-- **Değişti**: yeni adrese davet → yeni profil + bağlar (tek transaction) →
-  **en son** eski auth kullanıcısının silinmesi. Bir adım düşerse yeni açılan
-  auth kullanıcısı silinir; eski hesaba dokunulmaz.
+- **Değişti** (20261123; yönetim reposunda da aynı karar): **aynı** auth
+  hesabı kalır — profil kimliği, şube/sporcu bağları, geçmiş yerinde. Tek
+  transaction'da: profil (yeni e-postayla) + bağlar, çağıranın rolüyle →
+  `reset_parent_login_email` (service_role: adres değişir; hesap onaysız,
+  şifresiz ve oturumsuz olur; adres başka hesaptaysa `Yeni e-posta için davet
+  oluşturulamadı: Bu e-posta adresi başka bir hesapta kayıtlı.`) → davet
+  token'ı ve **yeni adrese** okulun markasının şifre oluşturma bağlantısı
+  (`type=invite`). Bir adım — e-postanın gönderimi dahil — düşerse hepsi geri
+  alınır; eski adres ve şifre geçerli kalır. Başarıda eski adresle giriş ve
+  eski refresh token'lar geçmez; veli yeni adresteki davetle şifresini koyar.
 
-  **Canlıdaki bilinen hata (bire bir taşındı):** eski hesap kalıcı silinir
-  (`auth.users` → `profiles` cascade), ama velinin `profile_branch_links` /
-  `parent_athlete_links` satırları `profiles`'a `NO ACTION` ile bağlı —
-  bağı olan her veli için silme `Yeni hesap açıldı ancak eski hesap
-  temizlenirken hata oluştu: Database error deleting user` ile düşer. Geri
-  alma da yeni hesabın bağları yüzünden düşer: yeni adrese davet gitmiş,
-  yeni hesap bağlarıyla kalır, eski hesap da durur. Bkz. `PROGRESS.md` →
-  açık sorular.
+  Eskiden (20261123'e kadar) eski auth hesabı silinip yeni hesap açılıyordu;
+  velinin bağ satırları `profiles`'a `NO ACTION` ile bağlı olduğu için bu,
+  bağı olan her velide `Database error deleting user` ile düşüyordu.
 
 Metinler: `Veli bilgileri ve bağlantıları başarıyla güncellendi.` · `Veli
-e-postası değiştiği için eski hesap silindi, yeni hesaba davet gönderildi ve
-tüm bağlantılar aktarıldı.`
+e-postası değiştirildi; yeni adrese şifre oluşturma daveti gönderildi.`
 
 ## `delete-account` (yönetim ve veli uygulaması)
 

@@ -198,7 +198,9 @@ export class AccountsRepository {
               phone_number  = $4::text,
               birth_of_date = $5::date,
               status        = $6::public.approval_status,
-              role_id       = 8
+              role_id       = 8,
+              -- E-posta yalnızca değiştiğinde verilir (update-parent).
+              email         = coalesce($7::text, email)
         where id = $1::uuid`,
       [
         id,
@@ -207,8 +209,27 @@ export class AccountsRepository {
         row.phoneNumber ?? null,
         row.birthOfDate ?? null,
         statusOrActive(row.status),
+        row.email ?? null,
       ],
     );
+  }
+
+  /**
+   * 20261123: velinin auth hesabının e-postasını değiştirir ve hesabı
+   * davetli hâle döndürür (onaysız, şifresiz, oturumsuz). service_role'e
+   * açık SECURITY DEFINER fonksiyon — çağıran bağlantının rolü önce
+   * `service_role`'e geçirilmiş olmalı (`DbContextService.switchRole`).
+   */
+  async resetParentLoginEmail(
+    c: PoolClient,
+    parentId: string,
+    email: string,
+  ): Promise<Envelope> {
+    const { rows } = await c.query<{ r: Envelope | null }>(
+      `select public.reset_parent_login_email($1::uuid, $2::text) as r`,
+      [parentId, email],
+    );
+    return rows[0].r ?? {};
   }
 
   async syncProfileBranchLinks(

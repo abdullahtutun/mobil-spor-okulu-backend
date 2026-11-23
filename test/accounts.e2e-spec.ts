@@ -769,29 +769,6 @@ describe('Hesap işlemleri: /functions/* (gerçek Postgres)', () => {
       parentA2 = { id: (await authUser(email)).id, email };
     });
 
-    /** Bağı hiç olmayan bir veli (doğrudan SQL; e-posta değişikliğinin başarı yolu için). */
-    async function linklessParent(): Promise<{ id: string; email: string }> {
-      const email = nextEmail('bagsiz');
-      const { rows } = await pg.query<{ id: string }>(
-        `insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
-           email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at,
-           updated_at, is_sso_user, is_anonymous)
-         values ('00000000-0000-0000-0000-000000000000', gen_random_uuid(),
-           'authenticated', 'authenticated', $1,
-           extensions.crypt($2, extensions.gen_salt('bf', 4)), now(),
-           '{"provider":"email","providers":["email"]}',
-           '{"created_by_manager":true}', now(), now(), false, false)
-         returning id`,
-        [email, SEED_PASSWORD],
-      );
-      await pg.query(
-        `insert into public.profiles (id, school_id, full_name, email, status, role_id)
-         values ($1, $2, 'Bağsız Veli', $3, 'active', 8)`,
-        [rows[0].id, SCHOOL_A, email],
-      );
-      return { id: rows[0].id, email };
-    }
-
     const body = (
       target: { id: string; email: string },
       extra: Record<string, unknown> = {},
@@ -854,7 +831,8 @@ describe('Hesap işlemleri: /functions/* (gerçek Postgres)', () => {
       await mail.settle();
       expect(mail.to(newEmail)).toHaveLength(0);
       expect(await authUser(newEmail)).toBeUndefined();
-      expect(await authUser(parentA2.email)).toBeDefined();
+      // Auth hesabına dokunulmadı.
+      expect((await authUser(parentA2.email)).id).toBe(parentA2.id);
     });
 
     it('hedef personel (genel müdür) olamaz: hesabı silinmez', async () => {
@@ -915,55 +893,178 @@ describe('Hesap işlemleri: /functions/* (gerçek Postgres)', () => {
       expect(res.body).toEqual({ success: false, error: msg });
     });
 
-    it('e-posta değişti (bağsız veli): yeni adrese davet, yeni profil + bağlar, eski auth hesabı silinir', async () => {
-      const old = await linklessParent();
+    /** Velinin auth satırı (kimliğiyle). */
+    const authById = async (id: string) =>
+      (
+        await pg.query<{
+          email: string;
+          email_confirmed_at: Date | null;
+          encrypted_password: string | null;
+          raw_user_meta_data: Record<string, unknown>;
+        }>(
+          `select email, email_confirmed_at, encrypted_password, raw_user_meta_data
+             from auth.users where id = $1`,
+          [id],
+        )
+      ).rows[0];
+
+    /** Yarım iş kalmadığını görmek için: auth, profil, bağlar, oturumlar. */
+    const snapshot = async (id: string) => ({
+      auth: await authById(id),
+      profile: await profile(id),
+      branches: await liveLinks('profile_branch_links', 'branch_id', id),
+      athletes: await liveLinks('parent_athlete_links', 'athlete_id', id),
+      sessions: (
+        await pg.query<{ n: string }>(
+          `select count(*) as n from auth.sessions where user_id = $1`,
+          [id],
+        )
+      ).rows[0].n,
+    });
+
+    const seedParent = { id: USERS.a.parent, email: EMAIL.parentA };
+
+    it.each([
+      [
+        'yeni adres başka bir hesapta',
+        () => ({ email: EMAIL.coachB }),
+        'Yeni e-posta için davet oluşturulamadı: Bu e-posta adresi başka bir hesapta kayıtlı.',
+      ],
+      [
+        'davet e-postası gönderilemedi',
+        () => {
+          mail.failNext();
+          return { email: nextEmail('gitmeyen') };
+        },
+        undefined,
+      ],
+      [
+        'başka okulun sporcusu (bağ yazımı düşer)',
+        () => ({ email: nextEmail('bag-red'), athlete_ids: [ATHLETES.mina] }),
+        undefined,
+      ],
+    ])(
+      'e-posta değişikliği düşerse hiçbir şey değişmez: %s',
+      async (_, extra, msg) => {
+        await login(EMAIL.parentA); // açık bir oturum: geri alınmalı
+        const before = await snapshot(seedParent.id);
+        const sentBefore = mail.sent.length;
+        const change = extra();
+        const res = await fn(
+          'update-parent',
+          await tokenOf(EMAIL.gmA),
+          body(seedParent, { ...change, full_name: 'Değişmemeli' }),
+        ).expect(400);
+        expect((res.body as FnBody).success).toBe(false);
+        if (msg) expect((res.body as FnBody).error).toBe(msg);
+        expect(await snapshot(seedParent.id)).toEqual(before);
+        expect(mail.sent.length).toBe(sentBefore);
+        await login(EMAIL.parentA); // eski adres ve şifre geçerli
+      },
+    );
+
+    it('reset_parent_login_email: istemciye kapalı, personeli reddeder', async () => {
+      await expect(
+        pg.query(
+          `begin; set local role authenticated;
+           select public.reset_parent_login_email($1, 'x@hesap.test'); commit;`.replace(
+            '$1',
+            `'${seedParent.id}'`,
+          ),
+        ),
+      ).rejects.toMatchObject({ code: '42501' });
+      await pg.query('rollback');
+      const { rows } = await pg.query<{ r: { code: string } }>(
+        `select public.reset_parent_login_email($1, 'x@hesap.test') as r`,
+        [USERS.a.generalManager],
+      );
+      expect(rows[0].r.code).toBe('not_found');
+      await login(EMAIL.gmA);
+    });
+
+    it('e-posta değişti (bağlı veli): aynı hesap, bağlar yerinde, eski adres giremez, yeni adrese markanın davet bağlantısı', async () => {
+      const oldSession = await login(EMAIL.parentA);
       const newEmail = nextEmail('yeni-adres');
       const res = await fn(
         'update-parent',
         await tokenOf(EMAIL.bmA),
-        body(old, { email: newEmail }),
+        body(seedParent, { email: newEmail, full_name: 'Aylin Deneme' }),
       ).expect(200);
       expect(res.body).toEqual({
         success: true,
         message:
-          'Veli e-postası değiştiği için eski hesap silindi, yeni hesaba davet gönderildi ve tüm bağlantılar aktarıldı.',
+          'Veli e-postası değiştirildi; yeni adrese şifre oluşturma daveti gönderildi.',
       });
-      expect(await authUser(old.email)).toBeUndefined();
-      const fresh = await authUser(newEmail);
-      expect(fresh.raw_user_meta_data).toMatchObject({ brand: 'dev_adim' });
-      expect(await profile(fresh.id)).toMatchObject({ role_id: '8' });
+
+      // Aynı profil kimliği, aynı bağlar.
+      expect(await profile(seedParent.id)).toMatchObject({
+        email: newEmail,
+        role_id: '8',
+        is_deleted: false,
+      });
       expect(
-        await liveLinks('profile_branch_links', 'branch_id', fresh.id),
+        await liveLinks('profile_branch_links', 'branch_id', seedParent.id),
       ).toEqual([BRANCH_A1]);
       expect(
-        await liveLinks('parent_athlete_links', 'athlete_id', fresh.id),
+        await liveLinks('parent_athlete_links', 'athlete_id', seedParent.id),
       ).toEqual([ATHLETES.deniz]);
-      expect(inviteLinkOf(await mail.waitFor(newEmail)).origin).toBe(
-        'https://mobil.devadim.com',
-      );
-    });
 
-    it('e-posta değişti (bağlı veli): eski hesap bağ satırları yüzünden silinemez → 400; eski hesap yerinde (canlıdaki davranış)', async () => {
-      const newEmail = nextEmail('bagli-yeni');
-      const res = await fn(
-        'update-parent',
-        await tokenOf(EMAIL.gmA),
-        body(parentA2, {
-          email: newEmail,
-          branch_id: BRANCH_A2,
-          athlete_ids: [ATHLETES.ada],
-        }),
-      ).expect(400);
-      expect(res.body).toEqual({
-        success: false,
-        error:
-          'Yeni hesap açıldı ancak eski hesap temizlenirken hata oluştu: Database error deleting user',
-      });
-      // Eski hesap ve bağları duruyor.
-      expect(await authUser(parentA2.email)).toBeDefined();
+      // Hesap davetli: onaysız, şifresiz, oturumsuz; marka metadata'da.
+      const auth = await authById(seedParent.id);
+      expect(auth.email).toBe(newEmail);
+      expect(auth.email_confirmed_at).toBeNull();
+      expect(auth.encrypted_password).toBe('');
+      expect(auth.raw_user_meta_data).toMatchObject({ brand: 'dev_adim' });
+      expect(await authUser(EMAIL.parentA)).toBeUndefined();
+
+      // Eski adres giremez, eski oturum yenilenemez.
       expect(
-        await liveLinks('parent_athlete_links', 'athlete_id', parentA2.id),
-      ).toEqual([ATHLETES.ada]);
+        (
+          (
+            await http()
+              .post('/auth/token?grant_type=password')
+              .send({ email: EMAIL.parentA, password: SEED_PASSWORD })
+              .expect(400)
+          ).body as FnBody
+        ).code,
+      ).toBe('invalid_credentials');
+      await http()
+        .post('/auth/token?grant_type=password')
+        .send({ email: newEmail, password: SEED_PASSWORD })
+        .expect(400);
+      expect(
+        (
+          (
+            await http()
+              .post('/auth/token?grant_type=refresh_token')
+              .send({ refresh_token: oldSession.refresh_token })
+              .expect(400)
+          ).body as FnBody
+        ).code,
+      ).toBe('refresh_token_not_found');
+
+      // Davet yeni adrese, okulun markasının şifre sayfasına; bağlantı çalışır.
+      const sent = await mail.waitFor(newEmail);
+      expect(sent.brand).toBe('dev_adim');
+      const link = inviteLinkOf(sent);
+      expect(link.origin).toBe('https://mobil.devadim.com');
+      expect(link.searchParams.get('type')).toBe('invite');
+      const verified = (
+        await http()
+          .post('/auth/verify')
+          .send({
+            type: 'invite',
+            token_hash: link.searchParams.get('token_hash'),
+          })
+          .expect(200)
+      ).body as Session & { user: { id: string } };
+      expect(verified.user.id).toBe(seedParent.id);
+      await http()
+        .put('/auth/user')
+        .set('Authorization', `Bearer ${verified.access_token}`)
+        .send({ password: 'YeniVeli123' })
+        .expect(200);
+      await login(newEmail, 'YeniVeli123');
     });
   });
 

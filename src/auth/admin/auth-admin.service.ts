@@ -1,6 +1,10 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { isPgError } from '../../common/errors/pg-error.mapper';
-import { DbContextService } from '../../db/db-context.service';
+import type { PoolClient } from 'pg';
+import {
+  AUTH_SERVICE_ROLE,
+  DbContextService,
+} from '../../db/db-context.service';
 import { type Brand, isBrand, passwordSetupUrl } from '../../mail/brand';
 import { MailService } from '../../mail/mail.service';
 import { authError } from '../auth.errors';
@@ -126,6 +130,58 @@ export class AuthAdminService {
       throw error;
     }
     return user;
+  }
+
+  /**
+   * Var olan, **davetli hâle döndürülmüş** hesaba (onaysız, adresi zaten yeni
+   * adres — `reset_parent_login_email`) davet: token + e-posta. Açık bir
+   * transaction'ın içinde çalışır ve bağlantının rolünü `auth_service`'e
+   * geçirir; e-posta commit'ten **önce** gider, gönderim düşerse çağıranın
+   * transaction'ı bütünüyle geri alınır (update-parent'ın e-posta
+   * değişikliği: profil, bağlar, adres ve davet ya hep birlikte olur ya hiç).
+   * Bağlantı `<marka kökeni>/sifre-olusturma/?token_hash=…&type=invite`,
+   * `inviteUser`'ınkiyle aynı.
+   */
+  async reinviteWithin(
+    c: PoolClient,
+    userId: string,
+    rawEmail: string,
+    metadata: Record<string, unknown>,
+    brand: Brand,
+  ): Promise<void> {
+    if (!isBrand(brand)) throw new Error(`Bilinmeyen marka: ${String(brand)}`);
+    const email = normalizeEmail(rawEmail);
+    this.mail.assertMailbox(brand);
+    await this.db.switchRole(c, AUTH_SERVICE_ROLE);
+    const user = await this.flows.lockUserById(c, userId);
+    if (
+      !user ||
+      user.deleted_at !== null ||
+      user.email_confirmed_at !== null ||
+      (user.email ?? '').toLowerCase() !== email
+    ) {
+      // Önce adres değişmiş ve hesap onaysız olmalı; onaylı bir hesaba davet
+      // GoTrue'da da `email_exists` ile reddedilir.
+      throw emailExists();
+    }
+    const invite = newInviteToken();
+    await this.flows.markInvited(c, userId, { ...metadata, brand });
+    await this.flows.setToken(
+      c,
+      userId,
+      email,
+      'confirmation_token',
+      invite.hash,
+    );
+    const name = metadata.name ?? metadata.full_name;
+    await this.mail.sendAuthEmail({
+      brand,
+      type: 'invite',
+      to: email,
+      name: typeof name === 'string' ? name : undefined,
+      tokenHash: invite.token,
+      redirectTo: passwordSetupUrl(brand),
+    });
   }
 
   /** `admin.createUser`: e-posta + şifreyle hesap (personel formu, S09). */

@@ -39,12 +39,11 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
 - S02: iOS App Store adresleri (`app_min_versions.store_url`) S17'den önce
   yazılmalı.
 
-- S09: bağı olan velinin e-postası değişince `update-parent` canlıda da
-  bozuk (eski auth hesabı FK yüzünden silinemiyor; yeni hesap + davet
-  yetim kalıyor). Yeni backend'e bire bir taşındı. Düzeltme (ör. eski
-  hesabın e-postasını `updateUserById` ile değiştirip yeniden davet etmek ya
-  da eski profili mezar taşına çevirmek) ürün kararı: yönetim reposunda mı
-  (canlı), yeni backend'de mi, ikisinde mi? (kullanıcıda)
+- 20261123 (S09 düzeltmesi): yönetim reposundaki
+  `20261123_parent_email_change.sql` + `update-parent` canlıya henüz
+  dağıtılmadı (kullanıcıda). Uygulanınca `scripts/schema-fingerprint.sql`
+  canlıda salt okunur çalıştırılıp `test/schema.e2e-spec.ts`'teki
+  `NOT_YET_LIVE` / `NOT_YET_LIVE_FINGERPRINT` `LIVE`'a taşınmalı.
 
 VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
@@ -52,6 +51,37 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S09 düzeltmesi — veli e-posta değişikliği (2026-11-23)
+- Karar (kullanıcı, orkestratör üzerinden): `update-parent`'ta e-posta
+  değişince eski hesabı silip yeni hesap açmak yerine **aynı** auth hesabının
+  adresi değişir; profil kimliği, bağlar, geçmiş kalır; yeni adrese şifre
+  oluşturma daveti gider. İki yerde düzeltildi.
+- Yönetim reposu (`main`, commit'te; dağıtılmadı): migration
+  `20261123_parent_email_change.sql` → `reset_parent_login_email(uuid, text)`
+  (service_role; rol 8 değilse `not_found`, adres başka hesaptaysa
+  `conflict`; adresi değiştirir, hesabı onaysız + şifresiz + oturumsuz yapar).
+  GoTrue kaynağından (supabase/auth master) doğrulandı: admin API bir hesabı
+  onaysız yapamıyor (`email_confirm: false` etkisiz), onaylı hesaba davet
+  `email_exists`, onaysız var olan hesaba `inviteUserByEmail` daveti yeniden
+  gönderiyor (send-email hook'u, `invite`; `redirect_to` sorgudan),
+  `generateLink` e-posta göndermiyor. Bu yüzden şifre sayfası değişmedi
+  (`type=invite`). Edge Function sırası: denetimler → marka → RPC → davet →
+  profil (+ e-posta) → bağlar (aynı id); bir adım düşerse yeniden göndermek
+  yolu tamamlar.
+- Backend: migration `0008_parent_email_change.sql` (import), `update-parent`
+  aynı karar ama **tek transaction** (çağıranın rolüyle profil + bağlar →
+  `switchRole(service_role)` + RPC → `AuthAdminService.reinviteWithin`
+  (auth_service, e-posta commit'ten önce)). Düşen her adımda — e-posta dahil —
+  hiçbir şey değişmez (testli). Yeni: `DbContextService.switchRole`.
+  Testler: bağlı velinin başarı yolu uçtan uca (aynı id, bağlar, eski adres
+  ve refresh reddi, davet bağlantısı → verify → şifre → giriş), üç düşme
+  durumu (adres başkasında, SMTP reddi, bağ yazımı) için durum anlık
+  görüntüsü aynı, RPC istemciye kapalı ve personeli reddediyor. Mutasyon:
+  davet hatası yutulunca 3 test düştü.
+- Sonraki oturumlar için: canlıya uygulanınca schema testindeki
+  `NOT_YET_LIVE*` canlı değerlere taşınır (açık sorular). S12: eski hatadan
+  yetim veli hesabı kalmış olabilir (not yerinde).
 
 ### S09 — Hesap işlemleri (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/api/functions.md`'ye
@@ -74,8 +104,8 @@ sonraki oturumların bilmesi gerekenler.
   - **Hesap silmede şifre** `AuthService.verifyPassword`: oturum açmaz,
     girişin kaba kuvvet sayaçlarını paylaşır (sınır 429 `rate_limited`).
   - Gövdede zod ile yalnızca tip denetimi (metin/liste); kurallar SQL'de.
-  - Canlının e-posta değişikliği hatası düzeltilmedi (davranış değişikliği,
-    ürün kararı) → açık sorular.
+  - Canlının e-posta değişikliği hatası ilk sürümde bire bir taşındı;
+    kullanıcı kararıyla aynı gün düzeltildi (yukarıdaki bölüm).
 - Sonraki oturumlar için:
   - S10: ön kayıt fonksiyonlarını aynı `/functions/` köküne ekle, ama
     `FunctionsController` sınıf düzeyinde `AuthorizationHeaderGuard`

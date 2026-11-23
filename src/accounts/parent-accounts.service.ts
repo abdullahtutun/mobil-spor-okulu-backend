@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { AuthAdminService } from '../auth/admin/auth-admin.service';
 import type { RequestAuth } from '../auth/request/jwt-verifier.service';
-import { isPgError } from '../common/errors/pg-error.mapper';
 import { DbContextService } from '../db/db-context.service';
 import type { Brand } from '../mail/brand';
 import { AccountsRepository, type Envelope } from './accounts.repository';
@@ -18,8 +17,6 @@ import {
 
 /** PostgREST'in `.single()` 0 satırda verdiği metin. */
 const NOT_SINGLE = 'Cannot coerce the result to a single JSON object';
-/** GoTrue'nun `admin.deleteUser` veritabanı hatasındaki metni. */
-const DELETE_USER_DB_ERROR = 'Database error deleting user';
 
 /**
  * Ex `create-parent` / `update-parent` (yönetim reposu
@@ -32,9 +29,11 @@ const DELETE_USER_DB_ERROR = 'Database error deleting user';
  * yazılır (`profiles_insert/update_policy`: yalnızca rol 8), bağlar
  * `sync_*` RPC'leriyle.
  *
- * Bir fark: profil + şube + sporcu yazımları Edge Function'da ayrı
+ * Farklar: profil + şube + sporcu yazımları Edge Function'da ayrı
  * isteklerdi (biri düşerse öncekiler kalıyordu); burada tek transaction.
- * Başarıdaki ve hatadaki yanıtlar aynı.
+ * E-posta değişikliği (20261123, yönetim reposunda da aynı karar) eski hesabı
+ * silip yeni hesap açmaz: **aynı** hesabın adresi değişir, hesap davetli hâle
+ * döner ve yeni adrese şifre oluşturma daveti gider; o da aynı transaction'da.
  */
 @Injectable()
 export class ParentAccountsService {
@@ -174,111 +173,85 @@ export class ParentAccountsService {
     const emailChanged =
       (current.email ?? '').toLowerCase() !== body.email.toLowerCase();
 
-    const createdAuthUserIds: string[] = [];
-    let targetUserId: string = id;
-    try {
-      if (emailChanged) {
-        // Adım 2A: yeni adrese davet + yeni profil.
-        const brand = await this.schoolBrand(schoolId);
-        try {
-          targetUserId = (
-            await this.admin.inviteUser(
-              body.email,
-              { created_by_manager: true, name: body.full_name },
-              brand,
-            )
-          ).id;
-        } catch (error) {
-          throw edgeFailure(
-            `Yeni e-posta için davet oluşturulamadı: ${messageOf(error)}`,
-          );
-        }
-        createdAuthUserIds.push(targetUserId);
+    // E-posta değiştiyse marka değişiklikten önce okunur (okunamazsa hiçbir
+    // şey yazılmadan hata).
+    const brand = emailChanged ? await this.schoolBrand(schoolId) : null;
+    const newEmail = body.email;
+
+    // Hepsi tek transaction'da: profil ve bağlar çağıranın rolüyle; e-posta
+    // değiştiyse ardından aynı hesabın adresi (service_role,
+    // `reset_parent_login_email`) ve davet token'ı + e-postası
+    // (`AuthAdminService.reinviteWithin`, auth_service). Bir adım düşerse —
+    // davet e-postasının gönderimi dahil — hepsi geri alınır.
+    //
+    // Eskiden (Edge Function, 20261123'e kadar) eski auth hesabı silinip yeni
+    // adrese yeni hesap açılıyordu; velinin bağ satırları `profiles`'a NO
+    // ACTION ile bağlı olduğu için silme bağı olan her velide düşüyordu. Artık
+    // profil kimliği, bağlar ve geçmiş yerinde kalır.
+    await this.db.withUser(auth.claims, async (c) => {
+      // Adım 2: profil. updated_at'i trigger yazar.
+      try {
+        await this.repo.updateParentProfile(c, id, {
+          schoolId,
+          fullName: body.full_name,
+          email: emailChanged ? newEmail : undefined,
+          phoneNumber: body.phone_number,
+          birthOfDate: body.birth_of_date,
+          status: body.status,
+        });
+      } catch (error) {
+        throw edgeFailure(`Profil güncellenirken hata: ${messageOf(error)}`);
       }
 
-      await this.db.withUser(auth.claims, async (c) => {
-        if (emailChanged) {
-          try {
-            await this.repo.insertParentProfile(c, targetUserId, {
-              schoolId,
-              fullName: body.full_name,
-              email: body.email,
-              phoneNumber: body.phone_number,
-              birthOfDate: body.birth_of_date,
-              status: body.status,
-            });
-          } catch (error) {
-            throw edgeFailure(
-              `Yeni profil oluşturulamadı: ${messageOf(error)}`,
-            );
-          }
-        } else {
-          // Adım 2B: mevcut profil. updated_at'i trigger yazar.
-          try {
-            await this.repo.updateParentProfile(c, id, {
-              schoolId,
-              fullName: body.full_name,
-              phoneNumber: body.phone_number,
-              birthOfDate: body.birth_of_date,
-              status: body.status,
-            });
-          } catch (error) {
-            throw edgeFailure(
-              `Profil güncellenirken hata: ${messageOf(error)}`,
-            );
-          }
-        }
+      // Adım 3: şube bağları (soft delete, RPC).
+      const branchSync = await this.envelopeOrFail(
+        () => this.repo.syncProfileBranchLinks(c, id, [branchId]),
+        (m) => `Şube ataması güncellenirken hata: ${m}`,
+      );
+      if (branchSync.success === false) {
+        throw edgeFailure(String(branchSync.message));
+      }
 
-        // Adım 3: şube bağları (soft delete, RPC). E-posta değiştiyse yeni
-        // profil için sıfırdan; eskisinin bağlarına dokunulmaz.
-        const branchSync = await this.envelopeOrFail(
-          () => this.repo.syncProfileBranchLinks(c, targetUserId, [branchId]),
-          (m) => `Şube ataması güncellenirken hata: ${m}`,
-        );
-        if (branchSync.success === false) {
-          throw edgeFailure(String(branchSync.message));
-        }
+      // Adım 4: sporcu bağları.
+      const athleteSync = await this.envelopeOrFail(
+        () => this.repo.syncParentAthleteLinks(c, id, body.athlete_ids ?? []),
+        (m) => `Sporcu eşleştirmesi güncellenirken hata: ${m}`,
+      );
+      if (athleteSync.success === false) {
+        throw edgeFailure(String(athleteSync.message));
+      }
 
-        // Adım 4: sporcu bağları.
-        const athleteSync = await this.envelopeOrFail(
-          () =>
-            this.repo.syncParentAthleteLinks(
-              c,
-              targetUserId,
-              body.athlete_ids ?? [],
-            ),
-          (m) => `Sporcu eşleştirmesi güncellenirken hata: ${m}`,
-        );
-        if (athleteSync.success === false) {
-          throw edgeFailure(String(athleteSync.message));
-        }
-      });
-
-      // Adım 5: e-posta değiştiyse eski auth kullanıcısı silinir (cascade
-      // profiles). Bütün denetimlerden ve yeni hesabın yazımından sonra.
-      if (emailChanged) {
+      // Adım 5: e-posta değiştiyse aynı hesap: yeni adres, davetli hâl
+      // (onaysız, şifresiz, oturumsuz), yeni adrese davet.
+      if (emailChanged && brand) {
+        const invitePrefix = 'Yeni e-posta için davet oluşturulamadı';
+        let reset: Envelope;
         try {
-          await this.admin.deleteUser(id);
+          await this.db.switchRole(c, 'service_role');
+          reset = await this.repo.resetParentLoginEmail(c, id, newEmail);
         } catch (error) {
-          throw edgeFailure(
-            `Yeni hesap açıldı ancak eski hesap temizlenirken hata oluştu: ${
-              isPgError(error) ? DELETE_USER_DB_ERROR : messageOf(error)
-            }`,
+          throw edgeFailure(`${invitePrefix}: ${messageOf(error)}`);
+        }
+        if (reset.success === false) {
+          throw edgeFailure(`${invitePrefix}: ${String(reset.message)}`);
+        }
+        try {
+          await this.admin.reinviteWithin(
+            c,
+            id,
+            newEmail,
+            { created_by_manager: true, name: body.full_name },
+            brand,
           );
+        } catch (error) {
+          throw edgeFailure(`${invitePrefix}: ${messageOf(error)}`);
         }
       }
-    } catch (error) {
-      // Geri alma: yeni e-posta için açılan auth kaydı silinir; eski hesaba
-      // dokunulmaz.
-      for (const userId of createdAuthUserIds) await this.deleteQuietly(userId);
-      throw error instanceof FunctionFailure
-        ? error
-        : edgeFailure(messageOf(error));
-    }
+    });
 
     return edgeOk(
       emailChanged
-        ? 'Veli e-postası değiştiği için eski hesap silindi, yeni hesaba davet gönderildi ve tüm bağlantılar aktarıldı.'
+        ? 'Veli e-postası değiştirildi; yeni adrese şifre oluşturma daveti gönderildi.'
         : 'Veli bilgileri ve bağlantıları başarıyla güncellendi.',
     );
   }
