@@ -11,7 +11,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S01 | tamam | 2026-11-23 | NestJS 11 iskeleti, zod config, pino, pg+Kysely, /health, Postgres 17+pg_cron imajı, dbmate, Testcontainers e2e |
 | S02 | tamam | 2026-11-23 | Kapı yayında; canlı migration kullanıcı tarafından uygulandı; mağaza sürümü 1.1.2+10 kullanıcıda |
 | S03 | tamam | 2026-11-23 | Şema dump'ı + compat (roller, auth, storage, pg_notify), dbmate 0001–0004, seed, canlıyla 9 parmak izi aynı |
-| S04 | bekliyor | | |
+| S04 | tamam | 2026-11-23 | DbContextService (rol+claims+timeout), JWT doğrulama, `POST /rpc/:name` + 65'lik allow-list, PostgREST hata eşlemesi, CORS/gövde/hız sınırı |
 | S05 | bekliyor | | |
 | S06 | bekliyor | | |
 | S07 | bekliyor | | |
@@ -45,6 +45,58 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S04 — DB istek bağlamı ve RPC kapısı (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna bakın. Orkestratörle,
+  kullanıcıya sorulmadan çalıştırıldı; karar gerektiren konu çıkmadı.
+- Allow-list: iki uygulamanın `.rpc(` çağrılarından çıkarıldı — yönetim 61,
+  veli 10 (envanterdeki 9 + S02'nin `get_min_app_version`'ı), toplam **65**;
+  INVENTORY ile fark yok. Hepsi `jsonb` döner, hiçbiri overload'lu değil.
+  Yerel veritabanının ACL'leri canlıyla aynı (S03 parmak izi) olduğu için
+  yetkiler yerelden okundu; canlıya bakmak gerekmedi.
+- Kendi verdiğim küçük kararlar:
+  - **Ayrı bağlantı adresi** `API_DATABASE_URL` (api_authenticator); API
+    `DATABASE_URL`'i artık kullanmıyor (yalnızca dbmate). Yerel parola
+    `npm run db:api-password`; docker compose'un api profili
+    `API_DATABASE_URL_DOCKER` (varsayılanı .env.example'daki yerel parola).
+  - **`callers` veritabanı yetkilerinin aynısı**: anon yalnızca
+    `get_min_app_version` ve üç `public_get_*_by_token`; dördü authenticated'a
+    da açık (DB'de de öyle). Allow-list DB'nin önünde ikinci kapı; test
+    ikisinin ayrışmasını yakalıyor.
+  - Allow-list dışı ad → 404 `PGRST202` (varlık sızmasın); rolü uymayan →
+    DB'nin cevabıyla aynı (anon 401 / authenticated 403, `42501`).
+  - **Token kuralları**: `role: anon` token'ı (Supabase anon anahtarı) anon
+    sayılır; `service_role` ve rolsüz/başka rol token'ları 401 `PGRST303` —
+    service_role yalnızca sunucu içinden. Guard global değil, uç başına
+    (`/health` ve S05'in `/auth/*`'ı süresi geçmiş token'la çağrılabilsin).
+  - Parametre çevirme `json_to_record` ile (PostgREST'in yöntemi): diziler,
+    enum'lar, jsonb, tarihler aynı kurallarla çevrilir; SQL'e giren ad/tip
+    yalnızca `pg_proc`'tan.
+  - Rol başına `statement_timeout`: anon 3 sn, authenticated 8 sn
+    (Supabase), service_role 60 sn; `run(..., { statementTimeoutMs })` ile
+    çağrı başına değiştirilebilir.
+  - Hız sınırı varsayılanı 600 istek/dk/IP (salon Wi-Fi'ı arkasında çok
+    cihaz), gövde 1 MB; Coolify'da `TRUST_PROXY=1` gerekecek (S16).
+  - `x-powered-by` kapatıldı (S01'in S16'ya bıraktığı not).
+- Sonraki oturumlar için:
+  - S05: `JwtVerifier`'ın kabul ettiği token = S05'in üreteceği token
+    (HS256, `role: authenticated`, `aud: authenticated`, UUID `sub`; claim
+    adları `test/support/tokens.ts` → `supabaseUserToken`). Auth uçlarına
+    `RequestAuthGuard` takılırsa süresi geçmiş token 401 olur — logout /
+    refresh bunu bilerek seçmeli. `JWT_SECRET` canlıdakiyle aynı verilirse
+    Supabase'in açık oturumları da geçer (e2e'de sınandı) — karar S12/S17.
+  - S07: yeni okuma fonksiyonları `RPC_ALLOWLIST`'e `callers: USER`,
+    `apps: [...]` ile; `test/rpc-allowlist.e2e-spec.ts` endpoint.dart'ta
+    `.rpc(` ile çağrılanlara bakıyor — S14/S15'te `.from()` çağrıları
+    `.rpc(`'ye dönünce liste kendiliğinden tutarlı olmalı. `setof`
+    dönüşler dizi olarak çıkar (test edildi).
+  - S08–S11: sunucu işleri `DbContextService.withRole('service_role', …)`
+    (RLS'i aşar) ya da kullanıcı adına `withUser(auth.claims, …)`; SQL
+    hatası için `isPgError` + `pgErrorToApiException`.
+  - S13/S14: istemci `POST <api>/rpc/<ad>` (gövde aynı, `Authorization:
+    Bearer`), hata gövdesi PostgREST'inkiyle aynı alanlar.
+  - S16: `TRUST_PROXY`, `CORS_ORIGINS` (üretim kökenleri), api_authenticator
+    parolası, hız sınırı tek süreç varsayımı.
 
 ### S03 — Veritabanı tabanı (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna bakın. `npm run db:migrate`

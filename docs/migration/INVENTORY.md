@@ -53,7 +53,9 @@ Ad sabitleri `lib/core/data/remote/endpoint.dart` dosyalarında.
   `get_sent_direct_messages`
 
 Kesin liste S04'te `endpoint.dart` dosyalarından ve `.rpc(` çağrılarından
-yeniden çıkarılır (`src/rpc/rpc-allowlist.ts`). Edge Function'ların
+yeniden çıkarıldı (`src/rpc/rpc-allowlist.ts`, 2026-11-23): Y 61, V 10 —
+yukarıdakilere ek olarak iki uygulamada da S02'nin `get_min_app_version`'ı
+(anon). `test/rpc-allowlist.e2e-spec.ts` farkı yakalar. Edge Function'ların
 `service_role` ile çağırdığı RPC'ler (ör. `convert_pre_registration`,
 `create_public_pre_registration_by_token`, `delete_own_account`,
 `claim_push_batch`, `complete_push_batch`) allow-list'e **girmez**; yalnızca

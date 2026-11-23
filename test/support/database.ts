@@ -16,8 +16,10 @@ const IMAGE = 'mobil-spor-okulu-postgres:test';
 
 export interface TestDatabase {
   container: StartedPostgreSqlContainer;
-  /** dbmate ve `pg` için hazır bağlantı adresi (`sslmode=disable`). */
+  /** dbmate ve `pg` için hazır bağlantı adresi (`sslmode=disable`), postgres. */
   url: string;
+  /** API'nin bağlandığı adres: `api_authenticator` (API_DATABASE_URL). */
+  apiUrl: string;
   stop(): Promise<void>;
 }
 
@@ -66,6 +68,22 @@ export async function seed(url: string): Promise<void> {
   }
 }
 
+/** Testte api_authenticator'ın parolası (yalnızca geçici konteyner). */
+export const TEST_API_PASSWORD = 'api-test-parolasi';
+
+/** `npm run db:api-password`'ün yaptığı: rol parolasız gelir (S03). */
+async function setApiPassword(url: string): Promise<void> {
+  const client = new Client({ connectionString: url });
+  await client.connect();
+  try {
+    await client.query(
+      `alter role api_authenticator password ${client.escapeLiteral(TEST_API_PASSWORD)}`,
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 export interface StartOptions {
   /** Migration'lardan sonra `test/fixtures/seed.sql`'i yükle. */
   seed?: boolean;
@@ -86,10 +104,15 @@ export async function startTestDatabase(
     .start();
   const url = `${container.getConnectionUri()}?sslmode=disable`;
   await migrate(url);
+  await setApiPassword(url);
   if (options.seed) await seed(url);
+  const api = new URL(url);
+  api.username = 'api_authenticator';
+  api.password = TEST_API_PASSWORD;
   return {
     container,
     url,
+    apiUrl: api.toString(),
     stop: async () => {
       await container.stop();
     },

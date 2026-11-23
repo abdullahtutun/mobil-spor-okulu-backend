@@ -1,7 +1,9 @@
 import { existsSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
+import { configureApp } from './app.setup';
 import { APP_CONFIG } from './config/config.module';
 import {
   InvalidConfigError,
@@ -15,11 +17,16 @@ async function bootstrap(): Promise<void> {
   // Nest açılmadan önce doğrula: hata yığın izi olmadan, tek mesajla çıkar.
   loadConfig(process.env);
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    // Gövde ayrıştırıcısı configureApp'te, sınırıyla birlikte kurulur.
+    bodyParser: false,
+  });
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
 
   const config = app.get<AppConfig>(APP_CONFIG);
+  configureApp(app, config);
   await app.listen(config.PORT);
 }
 

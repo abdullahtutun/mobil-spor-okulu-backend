@@ -60,12 +60,12 @@ read-only.
 
 ```
 src/
-  main.ts, app.module.ts
+  main.ts, app.module.ts, app.setup.ts (body limit, CORS, trust proxy — shared with e2e)
   config/            env schema (zod), typed ConfigService
   common/            errors, guards, decorators, interceptors, pipes
   db/                pg Pool, Kysely, DbContextService (withRole / withUser)
-  rpc/               POST /rpc/:name gateway + allow-list
-  auth/              login, refresh, logout, OTP flows, JWT, sessions
+  rpc/               POST /rpc/:name gateway + allow-list (rpc-allowlist.ts), pg_proc signature cache
+  auth/              request/ (S04: JwtVerifier, RequestAuthGuard, @ReqAuth); later login, refresh, logout, OTP flows, sessions
   mail/              per-brand SMTP + templates
   storage/           buckets on disk + storage.objects
   realtime/          WebSocket gateway fed by LISTEN/NOTIFY
@@ -117,6 +117,7 @@ needed in tests (`I*` naming, same as the apps).
 cp .env.example .env                    # once; every key is checked in src/config/env.schema.ts
 docker compose up -d db                 # Postgres 17 + pg_cron on 127.0.0.1:5432
 npm run db:migrate                      # dbmate up (db/migrations/, reads DATABASE_URL from .env)
+npm run db:api-password                 # once per fresh db: sets api_authenticator's password from API_DATABASE_URL
 npm run db:rollback                     # dbmate rollback (last migration)
 npm run db:new -- <name>                # new dbmate migration file
 npm run start:dev                       # API on :3000 — GET /health, GET /health/live
@@ -176,6 +177,28 @@ npm run db:migrate && npm run test:e2e
 - `api_authenticator` is created without a password; the environment sets
   it (`alter role api_authenticator password …`, S04 locally, S16 in
   production).
+
+## Request context and RPC gateway (S04)
+
+- The API's pool connects as **`api_authenticator`** (`API_DATABASE_URL`);
+  that role can read nothing by itself. `DATABASE_URL` (postgres) is only for
+  dbmate and tests' setup.
+- Every database call goes through `DbContextService.run({ role, claims },
+  fn)` (or `withRole` / `withUser`): one transaction, `set local role`,
+  `request.jwt.claims` (+ legacy `request.jwt.claim.sub/role`),
+  `statement_timeout` per role (anon 3 s, authenticated 8 s, service_role
+  60 s). Never query the pool directly in a feature.
+- `RequestAuthGuard` (per controller, not global) turns `Authorization:
+  Bearer` into `anon` / `authenticated`; a `service_role` token is refused
+  (401) — service_role exists only inside the server.
+- `POST /rpc/:name` calls only functions in `src/rpc/rpc-allowlist.ts`
+  (`callers` must equal the database's EXECUTE grants; `apps` must equal the
+  apps' `.rpc(` calls — `test/rpc-allowlist.e2e-spec.ts` checks both). A new
+  RPC the apps call = one line there. Functions called only by our own
+  services (ex Edge Functions) are **not** listed.
+- SQL errors leave as PostgREST does: `src/common/errors/pg-error.mapper.ts`
+  (`code` = SQLSTATE, `details`/`hint` null if absent); token errors
+  `PGRST301` / `PGRST303` (the apps refresh on these).
 
 ### Docker on this Mac (colima)
 

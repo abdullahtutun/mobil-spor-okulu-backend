@@ -65,7 +65,13 @@ describe('log redaksiyonu', () => {
     const base = {
       PORT: 3000,
       DATABASE_URL: 'postgres://x',
+      API_DATABASE_URL: 'postgres://y',
       JWT_SECRET: 'x'.repeat(32),
+      CORS_ORIGINS: [],
+      BODY_LIMIT: '1mb',
+      THROTTLE_LIMIT: 600,
+      THROTTLE_TTL_MS: 60_000,
+      TRUST_PROXY: 0,
       LOG_LEVEL: 'info' as const,
     };
     const dev = buildLoggerParams({ ...base, NODE_ENV: 'development' });

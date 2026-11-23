@@ -1,8 +1,10 @@
 import { Controller, Get, HttpStatus, Logger } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ApiException } from '../common/errors/api-error';
 import { DbContextService } from '../db/db-context.service';
 
 @Controller('health')
+@SkipThrottle()
 export class HealthController {
   private readonly logger = new Logger(HealthController.name);
 

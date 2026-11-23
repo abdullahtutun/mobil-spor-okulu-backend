@@ -47,4 +47,20 @@ describe('toApiError', () => {
       hint: 'Rolü kontrol edin',
     });
   });
+
+  it('gövde ayrıştırıcısının hataları 413 / 400 olur, 500 değil', () => {
+    const tooLarge = Object.assign(new Error('request entity too large'), {
+      type: 'entity.too.large',
+      status: 413,
+    });
+    expect(toApiError(tooLarge).status).toBe(413);
+    const badJson = Object.assign(new SyntaxError('Unexpected end'), {
+      type: 'entity.parse.failed',
+      status: 400,
+    });
+    expect(toApiError(badJson)).toEqual({
+      status: 400,
+      body: { code: 'PGRST102', message: 'Geçersiz ya da boş JSON gövdesi.' },
+    });
+  });
 });

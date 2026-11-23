@@ -24,7 +24,8 @@
     "db:migrate": "dbmate --migrations-dir db/migrations --no-dump-schema --wait up",
     "db:rollback": "dbmate --migrations-dir db/migrations --no-dump-schema rollback",
     "db:status": "dbmate --migrations-dir db/migrations status",
-    "db:new": "dbmate --migrations-dir db/migrations new"
+    "db:new": "dbmate --migrations-dir db/migrations new",
+    "db:api-password": "node scripts/set-api-password.mjs"
   },
   "jest": {
     "moduleFileExtensions": [
@@ -47,6 +48,8 @@
     "@nestjs/common": "^11.2.11",
     "@nestjs/core": "^11.2.11",
     "@nestjs/platform-express": "^11.2.11",
+    "@nestjs/throttler": "^6.8.0",
+    "jsonwebtoken": "^9.0.3",
     "kysely": "^0.28.20",
     "nestjs-pino": "^5.3.2",
     "pg": "^8.23.1",
@@ -64,6 +67,7 @@
     "@testcontainers/postgresql": "^12.2.2",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.19.2",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",

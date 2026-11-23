@@ -40,6 +40,9 @@ export function toApiError(exception: unknown): {
   status: number;
   body: ApiErrorBody;
 } {
+  const parserError = bodyParserError(exception);
+  if (parserError) return parserError;
+
   if (!(exception instanceof HttpException)) {
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -63,8 +66,39 @@ export function toApiError(exception: unknown): {
   if (raw.details !== undefined) body.details = raw.details;
   // Nest'in kendi doğrulama hataları mesajı dizi olarak verir; ayrıntı olarak korunur.
   else if (Array.isArray(raw.message)) body.details = raw.message;
-  if (typeof raw.hint === 'string') body.hint = raw.hint;
+  if (typeof raw.hint === 'string' || raw.hint === null) body.hint = raw.hint;
   return { status, body };
+}
+
+/**
+ * Express'in gövde ayrıştırıcısının (body-parser) hataları HttpException
+ * değildir ama `status` ve `type` taşır: sınırı aşan gövde 413, diğerleri
+ * 400. Bunlar istemci hatasıdır; 500 sayılmaz. (Bozuk JSON'un SyntaxError'ını
+ * Nest buraya gelmeden BadRequestException'a çevirir → `bad_request`.)
+ */
+function bodyParserError(
+  exception: unknown,
+): { status: number; body: ApiErrorBody } | undefined {
+  if (!(exception instanceof Error)) return undefined;
+  const { type, status } = exception as Error & {
+    type?: unknown;
+    status?: unknown;
+  };
+  if (typeof type !== 'string' || !type.startsWith('entity.')) return undefined;
+  if (typeof status !== 'number' || status < 400 || status >= 500) {
+    return undefined;
+  }
+  if (type === 'entity.too.large') {
+    return {
+      status: HttpStatus.PAYLOAD_TOO_LARGE,
+      body: { code: 'payload_too_large', message: 'İstek gövdesi çok büyük.' },
+    };
+  }
+  // PostgREST bozuk JSON'a PGRST102 der.
+  return {
+    status: HttpStatus.BAD_REQUEST,
+    body: { code: 'PGRST102', message: 'Geçersiz ya da boş JSON gövdesi.' },
+  };
 }
 
 function messageOf(value: unknown): string | undefined {

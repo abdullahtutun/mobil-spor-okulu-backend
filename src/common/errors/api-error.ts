@@ -2,14 +2,16 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 
 /**
  * API'den çıkan her hatanın tek gövdesi (AGENTS.md → K-ilkesi 8).
- * SQL hataları S04'te PostgREST'e benzer kodlarla (`P0001`, `42501`, …)
- * bu gövdeye çevrilir; uygulamaların `AppException` eşlemesi buna dayanır.
+ * SQL hataları PostgREST'in kodlarıyla (`P0001`, `42501`, `PGRST202` …) bu
+ * gövdeye çevrilir (`pg-error.mapper.ts`); uygulamaların `AppException`
+ * eşlemesi buna dayanır.
  */
 export interface ApiErrorBody {
   code: string;
   message: string;
   details?: unknown;
-  hint?: string;
+  /** SQL hatalarında PostgREST gibi `null` olabilir. */
+  hint?: string | null;
 }
 
 /** HTTP durumundan, hata kendi kodunu vermediğinde kullanılan kod. */

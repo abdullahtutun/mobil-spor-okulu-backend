@@ -22,8 +22,10 @@ const logger = new Logger('DbModule');
       provide: DB_POOL,
       inject: [APP_CONFIG],
       useFactory: (config: AppConfig) => {
+        // api_authenticator olarak (K5); her istek DbContextService.run ile
+        // rol değiştirir. DATABASE_URL (postgres) API'de kullanılmaz.
         const pool = new Pool({
-          connectionString: config.DATABASE_URL,
+          connectionString: config.API_DATABASE_URL,
           max: 10,
           idleTimeoutMillis: 30_000,
           connectionTimeoutMillis: 5_000,

@@ -2,6 +2,7 @@ import { InvalidConfigError, loadConfig } from './env.schema';
 
 const valid = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/postgres',
+  API_DATABASE_URL: 'postgres://api_authenticator:p@localhost:5432/postgres',
   JWT_SECRET: 'x'.repeat(32),
 };
 
@@ -13,6 +14,19 @@ describe('loadConfig', () => {
       PORT: 3000,
       LOG_LEVEL: 'info',
     });
+  });
+
+  it('CORS_ORIGINS virgülle ayrılmış listeyi diziye çevirir', () => {
+    expect(loadConfig(valid).CORS_ORIGINS).toEqual([]);
+    expect(
+      loadConfig({
+        ...valid,
+        CORS_ORIGINS: 'https://a.example.com, https://b.example.com',
+      }).CORS_ORIGINS,
+    ).toEqual(['https://a.example.com', 'https://b.example.com']);
+    expect(() => loadConfig({ ...valid, CORS_ORIGINS: 'bozuk' })).toThrow(
+      InvalidConfigError,
+    );
   });
 
   it('PORT metnini sayıya çevirir', () => {

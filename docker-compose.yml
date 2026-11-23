@@ -32,6 +32,9 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres?sslmode=disable
+      # .env'deki adres 127.0.0.1'e bakar; konteynerden db servisine. Parola
+      # `npm run db:api-password` ile verilenle aynı olmalı.
+      API_DATABASE_URL: ${API_DATABASE_URL_DOCKER:-postgres://api_authenticator:api-yerel-parola@db:5432/postgres?sslmode=disable}
     ports:
       - "127.0.0.1:${PORT:-3000}:3000"
     depends_on:

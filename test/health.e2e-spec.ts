@@ -5,6 +5,7 @@ import { DB_POOL } from '../src/db/db.tokens';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { createTestApp } from './support/app';
 import { startTestDatabase, type TestDatabase } from './support/database';
 
 describe('Sağlık uçları (gerçek Postgres)', () => {
@@ -13,17 +14,7 @@ describe('Sağlık uçları (gerçek Postgres)', () => {
 
   beforeAll(async () => {
     db = await startTestDatabase();
-    process.env.NODE_ENV = 'test';
-    process.env.LOG_LEVEL = 'silent';
-    process.env.DATABASE_URL = db.url;
-    process.env.JWT_SECRET = 'e2e-test-icin-en-az-otuz-iki-karakter';
-
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    app.enableShutdownHooks();
-    await app.init();
+    app = await createTestApp(db);
   });
 
   afterAll(async () => {
