@@ -1,7 +1,7 @@
 # S14 — Yönetim uygulaması: istemci, auth ve RPC
 
 **Repo:** yönetim (`../mobil_spor_okulu`), dal `migrate/own-backend`
-· **Bağımlı:** S05, S06 (S13'ün `ApiClient`/`AuthSession` tasarımı varsa aynısı)
+· **Bağımlı:** S05, S06 (S13'ün `ApiClient`/`AuthSession` tasarımı: veli `migrate/own-backend`, `lib/core/data/remote/api/`)
 
 ## Amaç
 Yönetim uygulamasının çekirdeğini yeni backend'e geçirmek: istemci, oturum,

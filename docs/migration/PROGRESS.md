@@ -20,7 +20,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S10 | tamam | 2026-11-23 | `POST /functions/{submit-pre-registration,convert-pre-registration,bulk-convert-pre-registrations,site-lead}`, Edge gövdeleri/kodları ve denetim sırası aynı; IP özeti + trust proxy; 50 e2e (sınırlar, token, kapsam, kardeş veli, ILIKE, geri alma, CORS) |
 | S11 | tamam | 2026-11-23 | `GET /realtime` (WS, ilk mesajla token, kendi kanalı, her olay abone adına RLS'le), 0009 notifications trigger'ı → pg_notify, PgListener, send-push portu (sahte FCM ile), 9 cron komutu testli; 59 e2e |
 | S12 | tamam | 2026-11-23 | `src/data-migration/` export (salt okunur tek anlık görüntü) / import (replica, cron durur, logo öneki) / verify (parmak izi, FK, sequence, dosya md5, giriş); iki konteynerli prova sıfır fark; `RUNBOOK-data.md` |
-| S13 | bekliyor | | |
+| S13 | tamam | 2026-11-23 | Veli `migrate/own-backend`: `supabase_flutter` yerine `AuthSession` + `ApiClient` + `RealtimeClient`; 178 test, yerel backend + seed'e karşı uçtan uca veri kaynağı testi |
 | S14 | bekliyor | | |
 | S15 | bekliyor | | |
 | S16 | bekliyor | | |
@@ -49,6 +49,53 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S13 — Veli uygulaması yeni backend'de (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna bakın. Orkestratörle,
+  kullanıcıya sorulmadan çalıştırıldı; plan kararı (K1–K16) değişmedi,
+  backend kodu değişmedi (hata bulunmadı), canlıya hiçbir sorgu atılmadı.
+  Veli reposu `migrate/own-backend` dalında (`af2b905`), `main` Supabase'te.
+- Kendi verdiğim kararlar:
+  - **Kendi küçük istemcimiz**, `storage_client` değil (oturum dosyası
+    "kullanılabilir" diyordu): veli yalnızca indirme ve toplu silme yapıyor;
+    iki uç için supabase ailesinden bir paket tutmak `grep supabase` kabul
+    kriterini de bulandırırdı. Yollar ve gövdeler storage-api'ninkiyle aynı.
+  - **Oturum `flutter_secure_storage`'da** (supabase_flutter
+    SharedPreferences'ta tutuyordu): oturum dosyası güvenli depolama
+    istiyordu, yönetim uygulaması da bunu kullanıyor. Yerel eklenti →
+    mağaza sürümü (S17).
+  - **`AuthSession.onAuthStateChange` supabase-dart'ın olay adlarını
+    taşıyor** ve her dinleyiciye `initialSession` veriyor: `SessionGate`'in
+    kararları (ağ hatası çıkış değil, ret `signedOut`) aynı kaldı.
+  - **İstekten önce cihaz saatiyle yenileme** (30 sn pay) +
+    `SessionRetryClient`'ın sunucu reddinde tek tekrarı: supabase-dart'taki
+    ikili davranış korunsun.
+  - **Repository katmanında istisna adları değişti** (davranış değil):
+    `AuthException`/`PostgrestException`/`StorageException`/`FunctionException`
+    yerine `AuthApiException`/`ApiException`/`FunctionHttpException`; aksi
+    hâlde repository'ler supabase paketine bağlı kalırdı.
+  - **Uçtan uca deneme bir Dart testi** (`test/e2e/local_backend_test.dart`,
+    `API_E2E_BASE_URL` ile açılır): uygulamanın gerçek veri kaynaklarını
+    gerçek backend'e karşı çalıştırıyor; cihaz/simülatör gerekmedi. Ekranlar
+    cihazda denenmedi.
+- Kabul: veli `flutter analyze` (3 bilgi, `main` ile aynı), `flutter test`
+  (178 + 1 atlanan), e2e iki kez geçti, `flutter build web` derlendi.
+- Sonraki oturumlar için:
+  - S14: aynı tasarım `../mobil_spor_okulu_veli/lib/core/data/remote/api/`;
+    yönetimde `TimeoutHttpClient`/`NetworkAwareHttpClient` zinciri
+    `SessionRetryClient`'ın altında kalır, `AuthSession` kendi istekleri için
+    zincirin auth'suz kısmını (logger ve altı) kullanmalı. Yönetimin
+    `isNetworkError`'ı (captive portal, gateway kodları) veli
+    `isNetworkError`'ından geniş — birleştirilirken onunki esas.
+    `SessionRetryClient`'ın muaf yolları yeni yollara göre (`/auth/<uç>`,
+    `/storage/object/`).
+  - S15: şifre oluşturma sayfası `AuthSession.verifyOtp(type: 'invite',
+    tokenHash:)` + `updatePassword` + `signOut(scope: local)` ile yazılabilir
+    (bellek deposu: `MemorySessionStore`). Veli aydınlatma metni hâlâ
+    Supabase'i anıyor.
+  - S17: veli `migrate/own-backend` mağaza sürümü olmalı (yerel bağımlılık
+    değişti); veliler bir kez yeniden giriş yapar (oturumlar taşınmıyorsa).
+    `config/*.json`'daki `API_BASE_URL` S16'nın alan adıyla aynı olmalı.
 
 ### S12 — Veri, kullanıcı ve dosya taşıma (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna ve
