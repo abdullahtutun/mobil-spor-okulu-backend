@@ -3,7 +3,8 @@
  *
  * Liste uygulamaların gerçekten çağırdıklarıdır: iki uygulamanın
  * `lib/core/data/remote/endpoint.dart` sabitlerinden, yalnızca bir `.rpc(`
- * çağrısında kullanılanlar (2026-11-23: yönetim 61, veli 10, toplam 65).
+ * çağrısında kullanılanlar (2026-11-23: yönetim 61, veli 10, toplam 65), artı
+ * S07'nin 23 okuma fonksiyonu (`READS`, aşağıda).
  * `test/rpc-allowlist.e2e-spec.ts` kardeş repolar yanındaysa bu listeyi
  * oradan yeniden çıkarır ve fark varsa düşer.
  *
@@ -25,6 +26,13 @@
  *
  * `apps`: çağıran uygulama (Y = yönetim, V = veli). Yeni bir RPC eklenince
  * buraya bir satır; adı endpoint.dart'takiyle aynı.
+ *
+ * `reads` (S07): okuma fonksiyonları — uygulamaların bugünkü
+ * `.from(tablo).select(...)` okumalarının karşılığı (K7, migration 0007,
+ * eşleme docs/migration/read-mapping.md). Değer, yerine geçtiği `.from()`
+ * tablosu. S13/S15 uygulamayı `.rpc(` çağrısına çevirene kadar uygulama bu
+ * adı çağırmaz; test o sürede tablonun `.from()` okumasının hâlâ durduğuna
+ * bakar, sonra adın `.rpc(` ile çağrıldığına.
  */
 export type RpcCaller = 'anon' | 'authenticated';
 export type RpcApp = 'Y' | 'V';
@@ -32,12 +40,77 @@ export type RpcApp = 'Y' | 'V';
 export interface RpcAllowEntry {
   readonly callers: readonly RpcCaller[];
   readonly apps: readonly RpcApp[];
+  readonly reads?: readonly string[];
 }
 
 const USER = ['authenticated'] as const;
 const PUBLIC = ['anon', 'authenticated'] as const;
 
+/** S07'nin okuma fonksiyonları: `reads` = yerine geçtikleri `.from()` tablosu. */
+const READS: Readonly<Record<string, RpcAllowEntry>> = {
+  count_unread_notifications: {
+    callers: USER,
+    apps: ['Y', 'V'],
+    reads: ['notifications'],
+  },
+  get_school: { callers: USER, apps: ['Y'], reads: ['schools'] },
+  list_announcements: {
+    callers: USER,
+    apps: ['Y'],
+    reads: ['notification_announcements'],
+  },
+  list_athletes: { callers: USER, apps: ['Y'], reads: ['athletes'] },
+  list_attendances: { callers: USER, apps: ['Y'], reads: ['attendances'] },
+  list_birthday_candidates: { callers: USER, apps: ['Y'], reads: ['athletes'] },
+  list_branches: { callers: USER, apps: ['Y'], reads: ['branches'] },
+  list_classes: { callers: USER, apps: ['Y'], reads: ['classes'] },
+  list_coaches: { callers: USER, apps: ['Y'], reads: ['profiles'] },
+  list_customers: { callers: USER, apps: ['Y'], reads: ['customers'] },
+  list_discounts: { callers: USER, apps: ['Y'], reads: ['discounts'] },
+  list_expiring_registrations: {
+    callers: USER,
+    apps: ['Y'],
+    reads: ['athletes'],
+  },
+  list_financial_records: {
+    callers: USER,
+    apps: ['Y'],
+    reads: ['financial_records'],
+  },
+  list_income_expense_items: {
+    callers: USER,
+    apps: ['Y'],
+    reads: ['income_expense_items'],
+  },
+  list_notification_preferences: {
+    callers: USER,
+    apps: ['Y'],
+    reads: ['notification_preferences'],
+  },
+  list_notifications: {
+    callers: USER,
+    apps: ['Y', 'V'],
+    reads: ['notifications'],
+  },
+  list_parents: { callers: USER, apps: ['Y'], reads: ['profiles'] },
+  list_pre_registrations: {
+    callers: USER,
+    apps: ['Y'],
+    reads: ['pre_registrations'],
+  },
+  list_role_permissions: {
+    callers: USER,
+    apps: ['Y'],
+    reads: ['role_permissions'],
+  },
+  list_roles: { callers: USER, apps: ['Y'], reads: ['roles'] },
+  list_roster_athletes: { callers: USER, apps: ['Y'], reads: ['athletes'] },
+  list_sports: { callers: USER, apps: ['Y'], reads: ['sports'] },
+  list_users: { callers: USER, apps: ['Y'], reads: ['profiles'] },
+};
+
 export const RPC_ALLOWLIST: Readonly<Record<string, RpcAllowEntry>> = {
+  ...READS,
   acknowledge_privacy_notice: { callers: USER, apps: ['Y', 'V'] },
   bulk_delete_athletes: { callers: USER, apps: ['Y'] },
   bulk_delete_pre_registrations: { callers: USER, apps: ['Y'] },

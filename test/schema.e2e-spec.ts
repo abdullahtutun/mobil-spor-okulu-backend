@@ -35,6 +35,15 @@ const LIVE = {
 
 const NOT_YET_LIVE: Partial<Record<keyof typeof LIVE, number>> = {};
 
+/**
+ * Yalnızca yeni backend'de olan, canlıya hiç gitmeyecek nesneler: S07'nin
+ * okuma fonksiyonları (0007; yorumları `backend:` ile başlar, parmak izi
+ * onları dışarıda bırakır).
+ */
+const BACKEND_ONLY: Partial<Record<keyof typeof LIVE, number>> = {
+  functions: 24,
+};
+
 /** scripts/schema-fingerprint.sql'in canlıdaki sonucu (2026-11-23). */
 const LIVE_FINGERPRINT: Record<string, string> = {
   cols: '31fbd54f69f58118ac7fe60736dd3456',
@@ -131,7 +140,7 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
       ['cronJobs', 'select count(*)::int as v from cron.job where active'],
       ['buckets', 'select count(*)::int as v from storage.buckets'],
     ] as const)('%s sayısı canlıyla aynı', async (key, sql) => {
-      const extra = NOT_YET_LIVE[key] ?? 0;
+      const extra = (NOT_YET_LIVE[key] ?? 0) + (BACKEND_ONLY[key] ?? 0);
       expect(await scalar<number>(sql)).toBe(LIVE[key] + extra);
     });
 

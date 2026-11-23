@@ -9,6 +9,9 @@
 -- Kapsam dışı (burada var, canlıda yok ya da bilerek farklı):
 --   schema_migrations        dbmate'in tablosu
 --   request_push_dispatch    db/compat/04: pg_net + Vault yerine pg_notify
+--   yorumu `backend:` ile başlayan fonksiyonlar
+--                            yalnızca yeni backend'de var (S07'nin okuma
+--                            fonksiyonları, 0007); canlıda karşılıkları yok
 --
 -- Henüz canlıya uygulanmamış bir migration taşındıysa (AGENTS.md → "Schema
 -- sync") onun nesneleri geçici olarak aşağıdaki `not in (...)` listelerine
@@ -22,6 +25,7 @@ select 'fn' as k, md5(string_agg(
   from pg_proc p
  where p.pronamespace = 'public'::regnamespace
    and p.proname not in ('request_push_dispatch')
+   and coalesce(obj_description(p.oid, 'pg_proc'), '') not like 'backend:%'
 union all
 select 'pol', md5(string_agg(
          tablename || policyname || cmd || array_to_string(roles, ',') || coalesce(qual, '') || coalesce(with_check, ''),

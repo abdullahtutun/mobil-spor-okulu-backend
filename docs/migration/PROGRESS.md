@@ -14,7 +14,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S04 | tamam | 2026-11-23 | DbContextService (rol+claims+timeout), JWT doğrulama, `POST /rpc/:name` + 65'lik allow-list, PostgREST hata eşlemesi, CORS/gövde/hız sınırı |
 | S05 | tamam | 2026-11-23 | Parola girişi, JWT (GoTrue claim'leri), hash'li dönen refresh token + çalınma tespiti, logout kapsamları, /auth/user, kaba kuvvet sınırları, `auth_service` rolü |
 | S06 | tamam | 2026-11-23 | Kodla sıfırlama, açık kayıt + kod + resend, davet bağlantısı, `AuthAdminService`, marka başına SMTP (hook içeriği birebir), hash'li kodlar + deneme sayacı, taramasız yanıtlar, gönderim/doğrulama sınırları |
-| S07 | bekliyor | | |
+| S07 | tamam | 2026-11-23 | 26 `.from()` okuması → 23 SECURITY INVOKER fonksiyon (+ S11'e `get_notification`), allow-list `READS`; gerçek PostgREST'le 10 kullanıcıda JSON fark testi |
 | S08 | bekliyor | | |
 | S09 | bekliyor | | |
 | S10 | bekliyor | | |
@@ -45,6 +45,54 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S07 — Tablo okumaları SQL fonksiyonlarına (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna ve
+  `docs/migration/read-mapping.md`'ye bakın. Orkestratörle, kullanıcıya
+  sorulmadan çalıştırıldı; plan kararı (K1–K16) değişmedi. Canlıya yalnızca
+  bir salt okunur katalog sorgusu atıldı (`backend:` yorumlu ya da aynı adlı
+  fonksiyon yok: 0 / 0).
+- Kendi verdiğim kararlar:
+  - **Fark testi gerçek PostgREST'le**: "aynı JSON" iddiasını elle yazılmış
+    beklentilerle değil, aynı veritabanına bağlı `postgrest/postgrest:v12.2.12`
+    konteynerine uygulamanın sorgusunu sorup karşılaştırarak sınadım (10
+    kullanıcı × 27 durum). RLS kapsamı da böylece tek tek kural yazmadan
+    bire bir sınanmış oluyor. Bedeli: e2e ilk koşuda bu imajı çeker.
+  - **Sayfalı yanıt düz dizi**, `{items, total}` değil (oturum dosyası
+    "ör." diyordu): `paged_query.dart` toplam kullanmıyor; `p_offset`/
+    `p_limit` PostgREST'in `offset`/`limit`'i. Dart'ta yalnızca sayfa
+    kapanışı değişir.
+  - **Aynı okumayı yapan iki çağrı tek fonksiyon**: `fetchAttendances` ve
+    `fetchClassAttendance` → `list_attendances` (gün aralığı = tek gün);
+    gelen kutusu Y ve V'de aynı `list_notifications` /
+    `count_unread_notifications`.
+  - **Sırasız okumalar deterministik** (`created_at, id`; eşitlikte `+ id`).
+  - **anon'a kapalı** (PostgREST anon'a boş liste dönerdi; bizde 401).
+  - **`get_notification`** (S11 Realtime satırı) allow-list'te değil, yalnızca
+    sunucu içinden `withUser`.
+  - **Canlı parmak izi**: yorumu `backend:` ile başlayan fonksiyonlar
+    `scripts/schema-fingerprint.sql`'den çıkarıldı (canlıda sonuç değişmez);
+    sayı testi `BACKEND_ONLY.functions = 24`. Yeni bir yalnızca-backend
+    fonksiyon aynı yorumu alır ve sayıyı artırır.
+  - **Yönetim reposuna migration eklenmez** (kabul kriteri): fonksiyonlar
+    yalnızca yeni backend'de lazım.
+- Sonraki oturumlar için:
+  - S11: Realtime mesajındaki `record` = `get_notification(id)` alıcı adına;
+    `null` dönerse o istemciye gönderme (alıcı değil ya da pasif/silinmiş).
+    Supabase Realtime'ın zaman damgası biçimi Postgres'in JSON biçiminden
+    farklı olabilir; uygulamalar yalnızca `read_at`/`push_status`'un null/
+    değerine bakıyor.
+  - S13 (V): `fetchInbox` → `list_notifications {p_limit}`,
+    `fetchUnreadCount` → `count_unread_notifications` (tam sayı döner).
+  - S15 (Y): `read-mapping.md`'deki tablo; sayfalı olanlarda
+    `p_offset: from, p_limit: to - from + 1`. Bir `.from()` kalmadığında
+    `test/rpc-allowlist.e2e-spec.ts` her okuma fonksiyonunun `.rpc(` ile
+    çağrıldığına bakar; uygulama yeni bir `.from()` eklerse (ya da bir
+    okumayı değiştirirse) fonksiyon da burada eklenir/değişir ve fark
+    testine bir durum eklenir.
+  - Yönetim reposunda bir tablonun sütunu değişirse `*` okumaları
+    kendiliğinden izler (`to_jsonb`); seçili sütunlu ve gömmeli okumalar
+    elle güncellenir — fark testi bunu yakalar.
 
 ### S06 — Auth akışları ve e-posta (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna bakın; sözleşme

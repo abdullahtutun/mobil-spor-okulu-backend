@@ -18,11 +18,7 @@ function dartFiles(dir: string): string[] {
   });
 }
 
-/**
- * Bir uygulamanın gerçekten çağırdığı RPC adları: `.rpc(` çağrısının ilk
- * argümanı olan sabitler, `endpoint.dart`'taki değerleriyle.
- */
-function rpcNamesOf(lib: string): string[] {
+function endpointConstants(lib: string): Map<string, string> {
   const endpoint = readFileSync(
     join(lib, 'core', 'data', 'remote', 'endpoint.dart'),
     'utf8',
@@ -33,6 +29,15 @@ function rpcNamesOf(lib: string): string[] {
   )) {
     constants.set(m[1], m[2]);
   }
+  return constants;
+}
+
+/**
+ * Bir uygulamanın gerçekten çağırdığı RPC adları: `.rpc(` çağrısının ilk
+ * argümanı olan sabitler, `endpoint.dart`'taki değerleriyle.
+ */
+function rpcNamesOf(lib: string): string[] {
+  const constants = endpointConstants(lib);
   const names = new Set<string>();
   for (const file of dartFiles(lib)) {
     const source = readFileSync(file, 'utf8');
@@ -47,11 +52,30 @@ function rpcNamesOf(lib: string): string[] {
   return [...names].sort();
 }
 
-const allowedFor = (app: RpcApp) =>
-  Object.entries(RPC_ALLOWLIST)
-    .filter(([, entry]) => entry.apps.includes(app))
-    .map(([name]) => name)
-    .sort();
+/**
+ * Uygulamanın PostgREST'ten doğrudan okuduğu tablolar: `.from(<x>Table)`
+ * (storage'ın `.from(<x>Bucket)`'ı ve Dart'ın `Map.from(...)`'ı sayılmaz).
+ */
+function fromTablesOf(lib: string): string[] {
+  const constants = endpointConstants(lib);
+  const tables = new Set<string>();
+  for (const file of dartFiles(lib)) {
+    // Yorum satırlarındaki örnekler (paged_query.dart) sayılmaz.
+    const source = readFileSync(file, 'utf8')
+      .split('\n')
+      .map((line) => line.replace(/\/\/.*$/, ''))
+      .join('\n');
+    for (const m of source.matchAll(/\.from\(\s*(\w+Table)\s*\)/g)) {
+      const table = constants.get(m[1]);
+      if (!table) throw new Error(`${file}: .from(${m[1]}) çözülemedi`);
+      tables.add(table);
+    }
+  }
+  return [...tables].sort();
+}
+
+const entriesFor = (app: RpcApp) =>
+  Object.entries(RPC_ALLOWLIST).filter(([, entry]) => entry.apps.includes(app));
 
 describe('RPC allow-list', () => {
   describe.each(Object.keys(APPS) as RpcApp[])(
@@ -60,11 +84,59 @@ describe('RPC allow-list', () => {
       const lib = APPS[app];
       const present = existsSync(lib);
       // Kardeş repo yoksa (ör. CI) atlanır; geliştirici makinesinde koşar.
-      (present ? it : it.skip)('fark yok', () => {
-        expect(allowedFor(app)).toEqual(rpcNamesOf(lib));
+      const run = present ? it : it.skip;
+
+      run(
+        'uygulamanın çağırdığı her RPC listede, listedeki her RPC çağrılıyor',
+        () => {
+          const called = rpcNamesOf(lib);
+          const rpcs = entriesFor(app)
+            .filter(([, entry]) => !entry.reads)
+            .map(([name]) => name)
+            .sort();
+          const reads = entriesFor(app)
+            .filter(([, entry]) => entry.reads)
+            .map(([name]) => name);
+          expect(called.filter((name) => !reads.includes(name))).toEqual(rpcs);
+        },
+      );
+
+      run('her .from() okumasının bir okuma fonksiyonu var (S07)', () => {
+        const covered = new Set(
+          entriesFor(app).flatMap(([, entry]) => entry.reads ?? []),
+        );
+        expect(fromTablesOf(lib).filter((t) => !covered.has(t))).toEqual([]);
       });
+
+      run(
+        'her okuma fonksiyonu ya çağrılıyor ya da yerine geçtiği .from() hâlâ duruyor',
+        () => {
+          const called = new Set(rpcNamesOf(lib));
+          const tables = new Set(fromTablesOf(lib));
+          const orphans = entriesFor(app)
+            .filter(([, entry]) => entry.reads)
+            .filter(
+              ([name, entry]) =>
+                !called.has(name) &&
+                !(entry.reads ?? []).some((t) => tables.has(t)),
+            )
+            .map(([name]) => name);
+          expect(orphans).toEqual([]);
+        },
+      );
     },
   );
+
+  it("her okuma fonksiyonu docs/migration/read-mapping.md'de", () => {
+    const doc = readFileSync(
+      join(__dirname, '..', 'docs', 'migration', 'read-mapping.md'),
+      'utf8',
+    );
+    const missing = Object.entries(RPC_ALLOWLIST)
+      .filter(([name, entry]) => entry.reads && !doc.includes(`\`${name}(`))
+      .map(([name]) => name);
+    expect(missing).toEqual([]);
+  });
 
   describe('veritabanıyla tutarlı', () => {
     let db: TestDatabase;

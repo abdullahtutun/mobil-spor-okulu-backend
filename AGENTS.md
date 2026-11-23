@@ -83,7 +83,8 @@ docker-compose.yml   local db (+ optional api profile); Dockerfile = API image
 scripts/             build-baseline.mjs, import-migration.mjs, schema-fingerprint.sql; later data export/import, backup
 dumps/               (gitignored) `supabase db dump` output — never committed
 test/                e2e + integration (Testcontainers, real Postgres)
-  support/           database.ts (build image, start, dbmate up, seed), docker-env.ts, fake-mail.ts (FakeMailbox)
+  support/           database.ts (build image, start, dbmate up, seed), docker-env.ts, fake-mail.ts (FakeMailbox),
+                     postgrest.ts (a real PostgREST on the test db — S07's read functions are diffed against it)
   fixtures/          seed.sql (made-up data: two schools, two brands, every role) + seed-ids.ts
 docs/migration/      plan, progress log, session files
 docs/api/            API contracts the apps are rewritten against (auth.md)
@@ -201,6 +202,25 @@ npm run db:migrate && npm run test:e2e
 - SQL errors leave as PostgREST does: `src/common/errors/pg-error.mapper.ts`
   (`code` = SQLSTATE, `details`/`hint` null if absent); token errors
   `PGRST301` / `PGRST303` (the apps refresh on these).
+
+## Read functions (S07)
+
+- The apps' `.from(table).select(...)` reads are `list_*` / `get_*` SQL
+  functions (`db/migrations/0007_read_functions.sql`, mapping
+  `docs/migration/read-mapping.md`): `SECURITY INVOKER`, `stable`,
+  `search_path = public, extensions`, return the same JSON PostgREST did
+  (`*` = `to_jsonb(row)`, embeds under the same keys, many-to-one → object
+  or null, one-to-many → array or `[]`, `!inner` → inner join). No new
+  permission rule: RLS of every table read decides, as it did in PostgREST.
+- Paging is `p_offset` / `p_limit`, the reply a plain array (as
+  `paged_query.dart` expects). Anon cannot call them.
+- They are allow-listed under `READS` with `reads: [<table>]`. Their comment
+  starts with `backend:` — that keeps them out of the live-schema fingerprint
+  (`BACKEND_ONLY` in `test/schema.e2e-spec.ts`); do the same for any other
+  backend-only function.
+- `test/read-functions.e2e-spec.ts` asks a real PostgREST the app's query and
+  our `/rpc` the function, for ten users, and compares the JSON. A changed or
+  new app read = change the function **and** add/adjust the case there.
 
 ## Auth (S05)
 

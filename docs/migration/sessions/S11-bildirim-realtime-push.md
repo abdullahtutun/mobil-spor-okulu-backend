@@ -28,7 +28,9 @@ HTTP çağrısı olmadan (K10, K11).
       Kimlik: bağlanırken access token; süresi dolmadan istemci yeni token
       gönderir, dolarsa sunucu kapatır. Kullanıcı yalnızca kendi kanalına
       abone olur. Mesaj: `{ event: 'INSERT' | 'UPDATE', record }`; `record`
-      S07'nin gelen kutusu şekliyle aynı. Heartbeat.
+      = `get_notification(p_id)` (S07, 0007: satırın bütün sütunları,
+      alıcının RLS'iyle, `withUser`; alıcı değilse null → gönderme). Veli
+      uygulamasının `isRevived`'ı `read_at`/`push_status` okur. Heartbeat.
 - [ ] Ayrı (havuz dışı) bir bağlantıyla `LISTEN`; kopunca yeniden bağlan ve
       bağlı istemcilere "yeniden oku" sinyali gönder (kaçan olaylar
       yeniden oynatılmaz — uygulamalar zaten yeniden okuyor).
