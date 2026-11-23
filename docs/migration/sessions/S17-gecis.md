@@ -50,3 +50,7 @@ bir bakım penceresiyle geçmek; sonra Supabase'i güvenle kapatmak.
 
 ## Teslim notu
 _(oturum sonunda doldurulur)_
+
+> **S12'den:** veri adımı `docs/migration/RUNBOOK-data.md` (export → import
+> `--storage-prefix <API>/storage/` → verify → resume-cron → API aç → export
+> klasörünü sil). Oturumlar varsayılan olarak taşınmıyor (`--with-sessions`).

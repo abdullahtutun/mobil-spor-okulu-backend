@@ -74,6 +74,7 @@ src/
   accounts/          S09: POST /functions/{create-user,update-user,create-parent,update-parent,delete-account} (docs/api/functions.md)
   pre-registration/  S10: POST /functions/{submit-pre-registration,convert-pre-registration,bulk-convert-pre-registrations}
   site-lead/         S10: POST /functions/site-lead (own CORS) + validation copied from the management repo
+  data-migration/    S12: export / import / verify / resume-cron CLI (docs/migration/RUNBOOK-data.md)
   health/
 db/
   migrations/        dbmate SQL migrations (0001_baseline.sql = Supabase dump + compat, generated)
@@ -128,6 +129,7 @@ npm run start:dev                       # API on :3000 — GET /health, GET /hea
 npm test                                # unit (src/**/*.spec.ts)
 npm run test:e2e                        # integration (test/**/*.e2e-spec.ts, Testcontainers)
 npm run lint                            # eslint + prettier (check only; lint:fix fixes)
+npm run build && npm run data -- <export|import|verify|resume-cron> …   # S12 data migration (RUNBOOK-data.md)
 docker compose --profile api up -d --build   # API image too (what Coolify builds)
 ```
 
@@ -363,6 +365,21 @@ npm run db:migrate && npm run test:e2e
   named `backend_*` — both excluded from the live fingerprint.
 - Cron: the 9 jobs of `0003_cron_jobs.sql` run inside Postgres (pg_cron);
   `test/notifications.e2e-spec.ts` runs every job's command.
+
+## Data migration (S12)
+
+- `src/data-migration/`, runbook `docs/migration/RUNBOOK-data.md`. Export
+  never writes to the source: one `repeatable read read only` transaction,
+  files only via HTTP GET (`plan.spec.ts` checks the source text). Output
+  only under `/exports/` (gitignored; delete after use).
+- Scope in `plan.ts`: all of `public` (minus `schema_migrations`),
+  `auth.users/identities/mfa_factors`, `storage.objects`; sessions only with
+  `--with-sessions` (refresh tokens → SHA-256). Reference tables are
+  upserted. A source-only column not in `KNOWN_SOURCE_ONLY_COLUMNS` stops
+  the import.
+- Import: cron paused, `session_replication_role = replica`, one
+  transaction, sequences reset; verify compares fingerprints, FKs,
+  sequences and files. `test/data-migration.e2e-spec.ts` is the rehearsal.
 
 ## Docker on this Mac (colima)
 

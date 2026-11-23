@@ -19,7 +19,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S09 | tamam | 2026-11-23 | `POST /functions/{create-user,update-user,create-parent,update-parent,delete-account}`, Edge gövdeleri/kodları bire bir, denetim sırası aynı; 61 e2e (hiyerarşi, yetki, şube, kendi hesap, rol 8, e-posta değişikliği, son genel müdür, hız sınırı) |
 | S10 | tamam | 2026-11-23 | `POST /functions/{submit-pre-registration,convert-pre-registration,bulk-convert-pre-registrations,site-lead}`, Edge gövdeleri/kodları ve denetim sırası aynı; IP özeti + trust proxy; 50 e2e (sınırlar, token, kapsam, kardeş veli, ILIKE, geri alma, CORS) |
 | S11 | tamam | 2026-11-23 | `GET /realtime` (WS, ilk mesajla token, kendi kanalı, her olay abone adına RLS'le), 0009 notifications trigger'ı → pg_notify, PgListener, send-push portu (sahte FCM ile), 9 cron komutu testli; 59 e2e |
-| S12 | bekliyor | | |
+| S12 | tamam | 2026-11-23 | `src/data-migration/` export (salt okunur tek anlık görüntü) / import (replica, cron durur, logo öneki) / verify (parmak izi, FK, sequence, dosya md5, giriş); iki konteynerli prova sıfır fark; `RUNBOOK-data.md` |
 | S13 | bekliyor | | |
 | S14 | bekliyor | | |
 | S15 | bekliyor | | |
@@ -49,6 +49,41 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S12 — Veri, kullanıcı ve dosya taşıma (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna ve
+  `docs/migration/RUNBOOK-data.md`'ye bakın. Orkestratörle, kullanıcıya
+  sorulmadan çalıştırıldı; plan kararı (K1–K16) değişmedi, migration yok.
+  Canlıya yalnızca bir salt okunur sayım sorgusu (kişisel veri yok).
+- Kendi verdiğim kararlar:
+  - **Açık oturumlar taşınmaz** (oturum dosyasının varsayılanı);
+    `--with-sessions` hazır ve testli (SHA-256, eski token yenileniyor).
+    `JWT_SECRET`'ın Supabase'inki olması bunun için gerekmiyor.
+  - **Araçlar `src/data-migration/`'da** (dosya `scripts/` diyordu): lint ve
+    typecheck kapsamında, API imajında; S17 VPS'te çalıştırabilir.
+  - **Export `supabase db dump --data-only` değil**, tek `repeatable read
+    read only` transaction'da NDJSON + parmak izi: verify'ın kaynağın
+    parmak izine ihtiyacı var, yol sentetik kaynakta da aynı. Bedeli: canlı
+    export için DB bağlantı adresi gerekir (KULLANICI EYLEMİ).
+  - **Verify kaynağa bağlanmaz**: kaynağın değeri export anının anlık
+    görüntüsü (cron kaynağı sonradan değiştirse de yanlış fark çıkmaz).
+  - **Import cron'u durdurur**, `resume-cron` açar: yükleme ile verify
+    arasında cron bildirim yazmasın.
+  - **Başvuru tabloları upsert** (`app_min_versions` canlıda değişebilir);
+    `public.schema_migrations` (dbmate) hiç taşınmaz — prova `--replace`'te
+    bunu boşaltıyordu, yakalandı.
+  - Geçersiz adlı nesne satırı da dosyası da taşınmaz, gerekçeli not.
+  - Yetim veli hesabı (S09): canlıda 0 — açık soru kapandı.
+- Kabul: lint, typecheck, `npm test` (181), `npm run test:e2e` (687).
+- Sonraki oturumlar için:
+  - S16: imajda `node dist/data-migration/cli.js`; hedef `DATABASE_URL`
+    süper kullanıcı (replica kipi); `STORAGE_ROOT` API'ninkiyle aynı.
+  - S17: runbook sırası; API kapalıyken; `--storage-prefix` = üretim
+    `<API>/storage/`; export klasörü iş bitince silinir; `--with-sessions`
+    kararı orada değiştirilebilir. `auth.audit_log_entries` (5651) ayrıca.
+  - Yönetim reposuna yeni tablo/sütun gelirse araç kendiliğinden alır
+    (katalogdan okur); Supabase'e özgü yeni bir sütun import'u durdurur →
+    `KNOWN_SOURCE_ONLY_COLUMNS`.
 
 ### S11 — Bildirimler: realtime, push, cron (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/api/realtime.md`'ye
