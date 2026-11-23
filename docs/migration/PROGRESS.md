@@ -21,7 +21,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S11 | tamam | 2026-11-23 | `GET /realtime` (WS, ilk mesajla token, kendi kanalı, her olay abone adına RLS'le), 0009 notifications trigger'ı → pg_notify, PgListener, send-push portu (sahte FCM ile), 9 cron komutu testli; 59 e2e |
 | S12 | tamam | 2026-11-23 | `src/data-migration/` export (salt okunur tek anlık görüntü) / import (replica, cron durur, logo öneki) / verify (parmak izi, FK, sequence, dosya md5, giriş); iki konteynerli prova sıfır fark; `RUNBOOK-data.md` |
 | S13 | tamam | 2026-11-23 | Veli `migrate/own-backend`: `supabase_flutter` yerine `AuthSession` + `ApiClient` + `RealtimeClient`; 178 test, yerel backend + seed'e karşı uçtan uca veri kaynağı testi |
-| S14 | bekliyor | | |
+| S14 | tamam | 2026-11-23 | Yönetim `migrate/own-backend`: auth akışları `AuthSession`'da, bütün `.rpc(` `ApiClient.rpc`'de; `.from`/storage/functions/realtime S15'e kadar Supabase istemcisinde (dal arada kullanılamaz); 1219 test + yerel backend'e karşı gerçek e-posta koduyla uçtan uca |
 | S15 | bekliyor | | |
 | S16 | bekliyor | | |
 | S17 | bekliyor | | |
@@ -49,6 +49,49 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S14 — Yönetim uygulaması: istemci, auth, RPC (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna bakın. Orkestratörle,
+  kullanıcıya sorulmadan çalıştırıldı; plan kararı (K1–K16) değişmedi,
+  backend kodu değişmedi (hata bulunmadı), canlıya hiçbir sorgu atılmadı.
+  Yönetim reposu `migrate/own-backend` dalında (`ba3b4fd`), `main` Supabase'te
+  ve oturum sonunda yeniden `main`'e geçildi.
+- Kendi verdiğim kararlar:
+  - **Ara durumda derlenebilirlik:** oturum dosyası bölünmenin arada ne
+    olacağını söylemiyordu. `supabase_flutter` S15'e kadar kalıyor;
+    `Supabase.initialize(accessToken: AuthSession.accessTokenForRequest)` ile
+    `supabase.auth` kapatıldı (çağrılırsa istisna — `.auth.` kalmadığının
+    çalışma anı güvencesi). Dal derlenir, testler geçer; ama `.from()`
+    okumaları yeni token'la Supabase'e gittiği için S15'e kadar uygulama
+    hiçbir backend'le çalışmaz. `main` yayın dalı olarak kaldı.
+  - **supabase-dart'ın oturum/hata türleri geçici olarak yeniden
+    kullanıldı** (veli S13'te yerel türler yazmıştı): `.from()` çağrıları
+    aynı repository'lerde sürerken iki ayrı "sunucu reddi" türü olmasın,
+    29+25 repository ve `localizeAuthError` dokunulmadan kalsın diye. S15
+    paketi çıkarırken aynı adlarla yerel türlere geçer.
+  - **Ortak paket çıkarılmadı** (oturum dosyasının varsayılanı): iki
+    uygulamanın `api/` klasörü neredeyse aynı; S15'ten sonra fark kalırsa
+    düşünülebilir.
+  - **Uçtan uca denemede gerçek e-posta kodu:** backend'i
+    `SMTP_HOST=127.0.0.1 SMTP_PORT=2525` ile 2525'teki küçük bir SMTP
+    alıcısına bağladım (465 dışı port STARTTLS'siz düz SMTP); kod ve davet
+    `token_hash`'i e-postadan okundu. Böylece S13'te yalnızca birim testiyle
+    sınanan şifre sıfırlama, kayıt kodu, yeniden gönderme ve davet gerçek
+    backend'le denendi. Alıcı repoya girmedi (test başlığında tarif var).
+- Kabul: `.rpc(`/`.auth.` yalnızca `ApiClient.rpc` ve `ApiClient.auth`
+  (AuthSession) olarak kaldı; `flutter analyze` 52 (main 53, yeni yok);
+  `flutter test` 1219 + 1 atlanan; e2e iki kez geçti; `flutter build web`
+  derlendi.
+- Sonraki oturumlar için:
+  - S15: teslim notundaki "bilinen eksikler" listesi (yerel türler,
+    `SupabaseClient` kurucu parametreleri, `supabaseClientProvider`,
+    logger adı). `SessionRetryClient` storage yolunu zaten `/storage/object/`
+    olarak tanıyor. Şifre oluşturma sayfası S14'te yeni backend'e geçti
+    (S13 notundaki S15 maddesi yapıldı); sayfa ve ön kayıt paketi
+    `apiClientProvider`'ı kendi giriş noktalarında override ediyor.
+  - S15: `test/e2e/local_backend_test.dart` genişletilebilir (aynı
+    `API_E2E_MAILBOX` düzeniyle).
+  - S17: personel de bir kez yeniden giriş yapar (oturumlar taşınmıyorsa).
 
 ### S13 — Veli uygulaması yeni backend'de (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna bakın. Orkestratörle,

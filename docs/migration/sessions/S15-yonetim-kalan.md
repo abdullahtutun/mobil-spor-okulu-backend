@@ -16,6 +16,13 @@ hazırlamak.
 - Site `AGENTS.md`/README, `src/config/site.ts`, `src/infrastructure/lead/`
 
 ## Yapılacaklar
+- **S14'ten:** auth ve bütün `.rpc(` yeni backend'de (`lib/core/data/remote/api/`).
+  Kalan Supabase bağları ve geçici olarak kullanılan supabase-dart türleri
+  (`Session`, `User`, `AuthResponse`, `AuthApiException`,
+  `AuthRetryableFetchException`, `PostgrestException`) S14 teslim notunda;
+  paket çıkarken bunlar aynı adlarla yerel türlere geçer (veli S13'teki
+  gibi). Şifre oluşturma sayfası S14'te taşındı. Data source'ların çoğu
+  `(SupabaseClient, ApiClient)` alıyor — `.from()` taşınınca ilki düşer.
 - **S11'den:** gelen kutusu realtime'ı `docs/api/realtime.md` (yönetim
   yalnızca INSERT'e bakar; `UPDATE` olayları yok sayılabilir). Push'un
   `data.params`'ı artık tür başına izin listesi (`class_id`, `date`,
