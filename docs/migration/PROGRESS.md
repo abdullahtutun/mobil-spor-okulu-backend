@@ -22,7 +22,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S12 | tamam | 2026-11-23 | `src/data-migration/` export (salt okunur tek anlık görüntü) / import (replica, cron durur, logo öneki) / verify (parmak izi, FK, sequence, dosya md5, giriş); iki konteynerli prova sıfır fark; `RUNBOOK-data.md` |
 | S13 | tamam | 2026-11-23 | Veli `migrate/own-backend`: `supabase_flutter` yerine `AuthSession` + `ApiClient` + `RealtimeClient`; 178 test, yerel backend + seed'e karşı uçtan uca veri kaynağı testi |
 | S14 | tamam | 2026-11-23 | Yönetim `migrate/own-backend`: auth akışları `AuthSession`'da, bütün `.rpc(` `ApiClient.rpc`'de; `.from`/storage/functions/realtime S15'e kadar Supabase istemcisinde (dal arada kullanılamaz); 1219 test + yerel backend'e karşı gerçek e-posta koduyla uçtan uca |
-| S15 | bekliyor | | |
+| S15 | kısmen | 2026-11-23 | Yönetim `migrate/own-backend`: `supabase_flutter` çıktı (okumalar, storage, functions, realtime backend'de, yerel türler); site formu `/functions/site-lead`'e; 1235 test + iki e2e koşusu. Kalan: aydınlatma metni (kullanıcı kararı) |
 | S16 | bekliyor | | |
 | S17 | bekliyor | | |
 
@@ -42,6 +42,14 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
   (`send-push/data_params.ts`, kullanıcı onayıyla); dağıtım kullanıcıda:
   `supabase functions deploy send-push --no-verify-jwt`.
 - S16: `FCM_SERVICE_ACCOUNT` (Supabase secrets'taki değer) kullanıcıdan.
+- S15: **aydınlatma metni** — gizlilik politikası (`assets/legal/privacy_policy_tr.md`,
+  hizmet sağlayıcılar tablosundaki "Supabase Pte. Ltd. … İsviçre (Zürih)"
+  satırı ve yurt dışı aktarım anlatımı; veli uygulamasında birebir kopyası),
+  sitenin iletişim formu aydınlatma metni ve `features.ts`'teki "veriler
+  Supabase altyapısında, İsviçre'de" cümleleri. Yeni metin barındırma
+  bilgisine (VPS sağlayıcısı/konumu, yedek deposu — S16 soruları) bağlı ve
+  kullanıcı onayı istiyor; onaylanınca iki uygulamada `PrivacyPolicy.version`
+  artırılır.
 
 VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
@@ -49,6 +57,50 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S15 — Yönetim uygulaması: okumalar, storage, fonksiyonlar, realtime, site (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna bakın. Orkestratörle,
+  kullanıcıya sorulmadan çalıştırıldı; plan kararı (K1–K16) değişmedi,
+  backend kodu değişmedi (hata bulunmadı), canlıya hiçbir sorgu atılmadı.
+  Yönetim `migrate/own-backend` `d9ad2a0`, site `migrate/own-backend`
+  `1c4cd4a`; iki repo da sonunda `main`'de. Durum **kısmen**: aydınlatma
+  metni kullanıcı kararı bekliyor (açık sorular), veli reposuna dokunulmadı.
+- Kendi verdiğim kararlar:
+  - **Yerel türler supabase-dart'ın adlarıyla** (S14 kararı 2):
+    `api_types.dart`; repository'ler, `isNetworkError`, `localizeAuthError`
+    ve fonksiyon hata eşlemesi değişmedi. Veli `ApiException`/
+    `FunctionHttpException` adlarını seçmişti; yönetimde 29 repository'ye
+    dokunmamak için adlar korundu (iki uygulamanın `api/` klasörü bu yüzden
+    birebir değil).
+  - **`storage_client` yok**, kendi dört metodumuz (veli S13 gibi); yükleme
+    ham gövdeyle (multipart değil, `docs/api/storage.md` ikisini de kabul
+    ediyor).
+  - **Okumalar bir kez yeniden denenir** (`ApiClient.read`): PostgREST'in
+    GET'i `retryCount: 1` ile ağ değişiminden sonra yeni ağdan tekrar
+    gidiyordu (AGENTS.md "HTTP transport"); `/rpc` POST olduğu için bu
+    kendiliğinden kaybolurdu. Yalnızca ağ hatası, zaman aşımı değil;
+    yazmalar hiç.
+  - **`toSupabaseString` → `toDbString`** (kod satırında `supabase` kalmasın
+    diye; yorumlardaki Supabase anlatımları büyük ölçüde tarihçe, yollar
+    `supabase/` klasörüne — o klasör testlerin sözleşme kaynağı olarak kaldı).
+  - **Site varsayılan ucu `https://api.mobilsporokulu.com/functions/site-lead`**:
+    yönetim/veli `config/*.json`'daki `API_BASE_URL` ile aynı (alan adı S16'da
+    kesinleşir; `PUBLIC_LEAD_ENDPOINT` ezer). CSP `connect-src` de oraya.
+  - **Uçtan uca deneme ayrı konteynerde** (`-p s15e2e`, port 55432): 5432'de
+    bir SSH tüneli dinliyordu; seed sıfırlaması yanlış veritabanına gitmesin.
+- Kabul: `grep -ri supabase lib` yalnızca yorum; `flutter analyze` 51 (yeni
+  yok), `flutter test` 1235 + 2 atlanan, e2e iki kez geçti, web üç paket
+  derlendi; site test 104 + build. Veli `flutter analyze/test` bu oturumda
+  koşulmadı (repo değişmedi).
+- Sonraki oturumlar için:
+  - S15'in kalanı (aydınlatma metni) kullanıcı kararıyla: yönetimde metin +
+    `PrivacyPolicy.version`, veliye birebir kopya + sürüm, site aydınlatma
+    metni ve `features.ts`. Ayrı küçük bir oturum ya da S16'nın başı.
+  - S16: `CORS_ORIGINS` (üç web paketi + veli web), `SITE_ALLOWED_ORIGINS`
+    (site); API alan adı değişirse site `site.ts` + `.htaccess` CSP ve iki
+    uygulamanın `config/*.json`'ı birlikte.
+  - S17: yönetim de mağaza sürümü (yerel eklenti `app_links` çıktı);
+    `main`'e birleştirme yönetimde `migrate/own-backend`'den.
 
 ### S14 — Yönetim uygulaması: istemci, auth, RPC (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna bakın. Orkestratörle,
