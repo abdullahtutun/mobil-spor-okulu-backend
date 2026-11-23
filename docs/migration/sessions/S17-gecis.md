@@ -1,0 +1,45 @@
+# S17 — Geçiş provası ve canlıya geçiş
+
+**Repo:** hepsi · **Bağımlı:** hepsi
+
+## Amaç
+Supabase'ten yeni backend'e veri kaybı olmadan, planlı ve geri alınabilir
+bir bakım penceresiyle geçmek; sonra Supabase'i güvenle kapatmak.
+
+## Okunacaklar
+- `PROGRESS.md` (bütün günlük), `RUNBOOK-data.md`, `docs/ops/*`
+- S02 teslim notu (zorunlu güncelleme kapısını taşıyan sürümler)
+
+## Yapılacaklar
+- [ ] `docs/migration/RUNBOOK-cutover.md`: dakika dakika plan, her adımın
+      sahibi, doğrulama komutu ve geri alma noktası. İçermesi gerekenler:
+  - **Önce (T-1 hafta):** S02 kapısının yaygınlığı (kaç kullanıcı kapılı
+    sürümde); yeni uygulama sürümleri `migrate/own-backend` dalından build
+    edilip mağaza incelemesine gönderilir, **elle yayın** seçeneğiyle
+    bekletilir; tam prova (S16 sunucusunda, taze export ile, süre ölçülür);
+    okullara bakım duyurusu.
+  - **Pencere:** Supabase'te cron işleri durdurulur → yazmalar durdurulur
+    (bakım modu) → export → import → verify → sunucuda smoke test →
+    mağaza sürümleri yayınlanır, web bundle'ları ve site güncellenir →
+    Supabase'te `get_min_app_version` asgari sürümü yeni build'e çekilir.
+  - **Geri alma:** mağaza sürümü yayınlanmadan önce her adımda Supabase'e
+    dönülebilir (bakım modunu kaldır, cron'u aç); sonrası için ne
+    yapılacağı.
+  - **Sonra:** 24 saat yakından izleme; Supabase projesi birkaç hafta yalnızca
+    güncelleme kapısı için açık kalır, sonra veri ve proje silinir
+    (KVKK: taşınan verinin eski kopyası tutulmaz); export dosyaları silinir.
+- [ ] Geçiş dallarının (`migrate/own-backend`) `main`'e alınması.
+- [ ] Yönetim reposundaki `supabase/` klasörünün akıbeti (arşiv ya da silme)
+      ve migration'ların bundan sonra yalnızca backend reposunda olduğu
+      `AGENTS.md`'lere.
+- [ ] Prova: runbook'u baştan sona provada uygula, süreleri ve sorunları
+      günlüğe yaz, runbook'u düzelt.
+- [ ] Canlıya geçiş: kullanıcıyla birlikte, kullanıcının belirlediği gün.
+
+## Kabul kriterleri
+- Prova runbook'a göre sorunsuz tamamlandı.
+- Canlıya geçişten sonra: verify sıfır fark, iki uygulamada giriş ve ana
+  akışlar çalışıyor, push ve e-posta gidiyor, ilk gece cron işleri hatasız.
+
+## Teslim notu
+_(oturum sonunda doldurulur)_

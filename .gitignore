@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+
+# Kişisel veri: dump, export ve yerel dosya deposu repoya girmez.
+/dumps/
+/exports/
+/storage-data/
+
+.DS_Store
