@@ -20,26 +20,26 @@ Bu oturum `main` dalında, normal ürün işi olarak yapılır (geçiş dalı de
 - Memory: sürüm numaralandırma kuralı (1.0.N, build N, iki uygulama birlikte)
 
 ## Yapılacaklar
-- [ ] Yönetim reposunda migration: `app_min_versions(app text, platform text,
+- [x] Yönetim reposunda migration: `app_min_versions(app text, platform text,
       min_build int, store_url text)` (ya da tek satırlık bir yapı) ve
       **`anon` dahil herkese açık** `get_min_app_version(p_app, p_platform)`
       RPC'si. `app` değerleri: `management`, `parent`; `platform`: `android`,
       `ios`. Web için kapı yok (web her zaman son sürüm).
-- [ ] Başlangıçta, girişten **önce** kontrol: build numarası küçükse tam
+- [x] Başlangıçta, girişten **önce** kontrol: build numarası küçükse tam
       ekran, kapatılamayan "Güncelleme gerekli" ekranı + mağaza bağlantısı.
       Ağ hatası ya da RPC yoksa uygulama **açılır** (kapı asla kendi başına
       kilitlemez).
-- [ ] Router: yeni bir `AppStatus` (ör. `updateRequired`) ve `redirectFor`
+- [x] Router: yeni bir `AppStatus` (ör. `updateRequired`) ve `redirectFor`
       testleri.
-- [ ] ARB metinleri (tr + diğer diller), parity testleri geçsin.
-- [ ] Widget/birim testleri: küçük build → ekran; eşit/büyük → normal akış;
+- [x] ARB metinleri (tr + diğer diller), parity testleri geçsin.
+- [x] Widget/birim testleri: küçük build → ekran; eşit/büyük → normal akış;
       hata → normal akış.
-- [ ] İki uygulamanın `AGENTS.md`'sine kısa bir bölüm: kapının amacı ve
+- [x] İki uygulamanın `AGENTS.md`'sine kısa bir bölüm: kapının amacı ve
       asgari sürümün nasıl yükseltileceği (SQL tek satır).
 - [ ] Migration'ı canlı Supabase'e uygulamak **kullanıcının onayıyla** yapılır
       (PLAN.md değişmez kuralının tek istisnası; bu bir geçiş işi değil, ürün
       değişikliği). Başlangıç değeri: `min_build = 0`.
-- [ ] Sürüm numaralarını memory'deki kurala göre artır; mağaza sürümünü
+- [x] Sürüm numaralarını memory'deki kurala göre artır; mağaza sürümünü
       kullanıcı yayınlar.
 
 ## Kapsam dışı
@@ -53,4 +53,36 @@ dump'ıyla (S03) kendiliğinden gelir.
   kullanır).
 
 ## Teslim notu
-_(oturum sonunda doldurulur)_
+**Ne yapıldı (2026-11-23):**
+- Y `supabase/migrations/20261027_app_min_versions.sql` (+ `_rollback/`):
+  `app_min_versions (app, brand, platform, min_build, store_url, updated_at)`,
+  anahtar `(app, brand, platform)`, 8 satır `min_build = 0`;
+  `get_min_app_version(p_app, p_platform, p_brand)` → `app_ok` zarfı,
+  `data: {min_build, store_url}` ya da satır yoksa `data: null`. SECURITY
+  INVOKER, `anon`/`authenticated` select + execute; istemci yazamaz. Sonunda
+  kendi denetim bloğu var. **Canlıya henüz uygulanmadı** (kullanıcı onayı).
+- İki uygulamada `lib/features/app_update/` (data source → repository →
+  service → `UpdateGate` + `UpdateRequiredScreen` + `UpdateGateListener`),
+  `AppStatus.updateRequired` (bir kez girilince `setStatus` çıkmaz).
+  Y: `startUpProvider` önce kapıyı sorar, `updateGateRedirect` (router),
+  yol `/update-required`, `url_launcher` eklendi. V: `SessionGate.start`
+  önce kapıyı sorar, `redirectFor`'a durum, yol `/guncelleme`.
+  Öne gelişte (en çok 30 dk'da bir) yeniden sorulur.
+- Kapı kendi başına kilitlemez: ağ hatası, 3 sn zaman aşımı, satır/fonksiyon
+  yok, build okunamıyor → uygulama açılır. Web'de kapı yok.
+- Mağaza: satırdaki `store_url`; boşsa Android paket adından Play adresi,
+  iOS'ta düğme yok (App Store kimliği bilinmiyor).
+- ARB (tr/en) 4 anahtar; iki AGENTS.md'ye "Mandatory update gate" bölümü;
+  Android manifest'lere `https` VIEW sorgusu; sürüm iki uygulamada
+  **1.1.2+10**.
+
+**Test:** yerelde `postgres:17-bookworm` konteynerinde (anon/authenticated
+rolleri, `app_ok`/`set_updated_at` gerçek tanımları) migration iki kez
+çalıştırıldı; `anon` RPC'yi çağırdı, 8 satırı okudu, update/insert
+`permission denied` aldı. Y `test/app_update/update_gate_test.dart`
+(servis, yönlendirme, ekran, migration sözleşmesi), V
+`test/app_update/update_gate_test.dart` + `test/core/router_redirect_test.dart`.
+
+**Bilinen eksikler / kullanıcıda:** canlıya migration; 1.1.2+10 mağaza
+sürümü (iki uygulama, Android + iOS; native değişiklik olduğu için Shorebird
+yaması değil); S17'den önce iOS satırlarına App Store adresleri.

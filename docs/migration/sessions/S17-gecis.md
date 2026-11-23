@@ -21,7 +21,9 @@ bir bakım penceresiyle geçmek; sonra Supabase'i güvenle kapatmak.
   - **Pencere:** Supabase'te cron işleri durdurulur → yazmalar durdurulur
     (bakım modu) → export → import → verify → sunucuda smoke test →
     mağaza sürümleri yayınlanır, web bundle'ları ve site güncellenir →
-    Supabase'te `get_min_app_version` asgari sürümü yeni build'e çekilir.
+    Supabase'te `app_min_versions.min_build` yeni build'e çekilir (S02:
+    anahtar `(app, brand, platform)`, iki uygulama × iki marka × iki
+    platform; iOS satırlarına önce `store_url` yazılmalı).
   - **Geri alma:** mağaza sürümü yayınlanmadan önce her adımda Supabase'e
     dönülebilir (bakım modunu kaldır, cron'u aç); sonrası için ne
     yapılacağı.

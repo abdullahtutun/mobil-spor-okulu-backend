@@ -9,7 +9,7 @@ oturum dosyasında işaretli) · `tamam`.
 |---|---|---|---|
 | S00 | tamam | 2026-10-25 | Plan, envanter, oturum dosyaları, `/oturum` skill'i |
 | S01 | tamam | 2026-11-23 | NestJS 11 iskeleti, zod config, pino, pg+Kysely, /health, Postgres 17+pg_cron imajı, dbmate, Testcontainers e2e |
-| S02 | bekliyor | | |
+| S02 | kısmen | 2026-11-23 | Kapı iki uygulamada (1.1.2+10) ve migration yazıldı; canlıya uygulama ve mağaza sürümü kullanıcıda |
 | S03 | bekliyor | | |
 | S04 | bekliyor | | |
 | S05 | bekliyor | | |
@@ -39,12 +39,50 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
   `cliPluginsExtraDirs`, `credsStore: desktop` satırını silmek. Ayrıntı:
   AGENTS.md → "Docker on this Mac".
 
+- S02: `20261027_app_min_versions.sql` canlıya uygulanacak mı (kullanıcı
+  onayı) ve 1.1.2+10 mağazaya ne zaman çıkacak? iOS App Store adresleri
+  (`store_url`) S17'den önce yazılmalı.
+
 VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 ## Günlük
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S02 — Zorunlu güncelleme kapısı (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna bakın. Kod Y ve V `main`
+  dallarında; migration `../mobil_spor_okulu/supabase/migrations/20261027_app_min_versions.sql`.
+- **Kapıyı taşıyan sürümler (S17 bunu kullanır):** yönetim ve veli
+  **1.1.2+10** (build 10), iki marka, Android + iOS — mağazaya çıktığında.
+  Build ≤ 9 kapı taşımaz; onlar `min_build` ile durdurulamaz. Geçiş gecesi:
+  `update public.app_min_versions set min_build = <yeni backend'e bağlı ilk
+  build> where …;` (Supabase'te). Yükseltmeden önce iOS satırlarına
+  `store_url` yazılmalı, yoksa iOS'ta "Güncelle" düğmesi çıkmaz.
+- Kendi verdiğim küçük kararlar:
+  - Anahtara **`brand`** eklendi (oturum dosyası `(app, platform)` diyordu):
+    iki marka mağazaya ayrı zamanlarda çıkıyor; tek değer, son sürümü daha
+    eski markanın güncel kullanıcılarını da kilitlerdi. RPC üç parametreli:
+    `get_min_app_version(p_app, p_platform, p_brand)`; brand = derlemenin
+    markası (`AppConfig.brand.key`).
+  - RPC **SECURITY INVOKER** + tabloya `anon`/`authenticated` select
+    politikası: 20261016 ve 20261017'nin denetim blokları `anon`'a açık
+    SECURITY DEFINER fonksiyonu reddediyor (yeniden çalıştırınca patlardı).
+  - Açılışa ek olarak **öne gelişte** (30 dk aralıkla) de soruluyor:
+    arka planda açık kalan eski uygulama da geçişte durdurulsun.
+  - Zaman aşımı 3 sn (çevrimdışı salon açılışı uzamasın); her hata açar.
+  - `AppStatus.updateRequired` yapışkan: `setStatus` ondan çıkmaz.
+  - Sürüm 1.1.2+10 (memory kuralı: patch ve build +1, iki uygulama birlikte).
+  - Y'ye `url_launcher` eklendi; iki manifest'e `https` VIEW `<queries>`.
+- Sonraki oturumlar için:
+  - S03: şema dump'ında `app_min_versions` ve `get_min_app_version` gelir
+    (canlıya uygulandıysa). Yeni backend'de de `anon` çağırabilmeli
+    (K6 allow-list'ine `get_min_app_version` herkese açık olarak).
+  - S13/S14: istemci `RpcEnvelope` ile okuyor; yeni backend aynı zarfı
+    dönerse değişiklik gerekmez.
+  - S17: yukarıdaki SQL; geçişten önce Supabase'teki `min_build` ile yeni
+    backend'deki aynı tablonun değeri ayrı ayrı düşünülmeli (yeni backend'e
+    bağlı build'ler yeni backend'den soracak).
 
 ### S01 — Temel iskelet (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna bakın. Canlı Supabase
