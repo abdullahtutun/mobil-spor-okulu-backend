@@ -38,10 +38,9 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
 - S02: 1.1.2+10 mağazaya ne zaman çıkacak? (kullanıcıda)
 - S02: iOS App Store adresleri (`app_min_versions.store_url`) S17'den önce
   yazılmalı.
-- S11: canlı `send-push` birthdays_today/upcoming'de sporcu adlarını
-  (`names`), pre_registration_received'da çocuğun adını (`athlete_name`)
-  FCM `data`'sına koyuyor. Backend'de izin listesiyle düzeltildi; yönetim
-  reposundaki Edge Function'da da düzeltilip dağıtılsın mı? (kullanıcı)
+- S11: send-push `data` sızıntısı yönetim reposunda düzeltildi
+  (`send-push/data_params.ts`, kullanıcı onayıyla); dağıtım kullanıcıda:
+  `supabase functions deploy send-push --no-verify-jwt`.
 - S16: `FCM_SERVICE_ACCOUNT` (Supabase secrets'taki değer) kullanıcıdan.
 
 VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.

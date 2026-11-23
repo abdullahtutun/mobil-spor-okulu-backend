@@ -10,7 +10,8 @@
  * — çocuk adı, tutar, telefon yok. Duyuru istisnadır (gönderen herkesin
  * göreceğini bilerek yazıyor); veliye özel mesaj istisna değildir.
  *
- * `dataParams()`'ta BİLİNÇLİ FARK: send-push personel türlerinde satırın
+ * `dataParams()` = send-push/data_params.ts (`DATA_KEYS`, Kasım 2026'dan
+ * beri orada da aynı tablo; ikisi birlikte değişir). Önceki send-push personel türlerinde satırın
  * bütün `params`'ını `data`'ya koyuyordu; `birthdays_today` /
  * `birthdays_upcoming` orada sporcu adlarını (`names`, ilk beş), ve
  * `pre_registration_received` çocuğun adını (`athlete_name`) taşıyor. `data`
