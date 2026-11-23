@@ -19,6 +19,18 @@ ve yerelde provası. S17 bu araçları geçiş gecesi çalıştırır.
   refresh token'lar taşınır.
 
 ## Yapılacaklar
+- **S03'ten bilinmesi gerekenler:**
+  - `roles`, `role_permissions` ve `app_min_versions` `0004_reference_data.sql`
+    ile zaten dolu: kopyalanmaz (ya da `on conflict do nothing`).
+  - Üretilen sütunlar kopyaya girmez (`generated always`): `auth.users.confirmed_at`,
+    `auth.identities.email`, `storage.objects.path_tokens`.
+  - `auth.*` tablolarının sütunları canlıyla bire bir (`db/compat/02_auth.sql`);
+    `storage.objects`/`buckets` canlıdaki sütunların alt kümesi (sürümleme,
+    yaşam döngüsü sütunları yok, `03_storage.sql`).
+  - `auth.audit_log_entries` tablosu yok (5651 saklaması için ayrıca karar).
+  - Şema dump'ı CLI ile parolasız alınabiliyor:
+    `supabase db dump --project-ref <ref> [--data-only] -f dumps/…`
+    (geçici giriş rolü, IPv4 pooler; colima'da `DOCKER_HOST` gerekli).
 - [ ] `scripts/export/`: public şema verisi (`supabase db dump --linked
       --data-only`), `auth.users` (yalnızca S03'teki sütunlar; salt okunur
       sorgu), `storage.objects` satırları ve iki bucket'ın bütün dosyaları

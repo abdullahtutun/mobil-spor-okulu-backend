@@ -8,6 +8,11 @@ kuyruğunun FCM'e boşaltılması (`send-push` yerine), veritabanından dışa
 HTTP çağrısı olmadan (K10, K11).
 
 ## Okunacaklar
+- **S03'ten:** `public.request_push_dispatch()` artık `pg_notify('push_dispatch', '')`
+  (boş yük; `db/compat/04_supabase_removed.sql`). `supabase_realtime` yayını
+  yok; gelen kutusu için notifications trigger'ı + pg_notify burada yazılır.
+  pg_cron işleri (9 tane, `expire_trials_job` dahil) `0003_cron_jobs.sql`'de
+  zaten kurulu, UTC.
 - Y `supabase/migrations/20260927_notifications.sql` (kuyruk, dispatch,
   `claim_push_batch`/`complete_push_batch`), `20261005_parent_attendance_payment_notifications.sql`
 - Y `supabase/functions/send-push/index.ts` (tamamı)

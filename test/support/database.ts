@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
+import { Client } from 'pg';
 import { GenericContainer } from 'testcontainers';
 
 const execFileAsync = promisify(execFile);
@@ -52,11 +54,30 @@ export async function migrate(url: string): Promise<void> {
   );
 }
 
+/** `test/fixtures/seed.sql`'i (uydurma iki okul) verilen veritabanına yükler. */
+export async function seed(url: string): Promise<void> {
+  const sql = readFileSync(join(ROOT, 'test', 'fixtures', 'seed.sql'), 'utf8');
+  const client = new Client({ connectionString: url });
+  await client.connect();
+  try {
+    await client.query(sql);
+  } finally {
+    await client.end();
+  }
+}
+
+export interface StartOptions {
+  /** Migration'lardan sonra `test/fixtures/seed.sql`'i yükle. */
+  seed?: boolean;
+}
+
 /**
  * Projenin imajından taze bir Postgres başlatır ve migration'ları uygular.
  * Veritabanı adı Supabase'teki gibi `postgres` (pg_cron orada çalışır).
  */
-export async function startTestDatabase(): Promise<TestDatabase> {
+export async function startTestDatabase(
+  options: StartOptions = {},
+): Promise<TestDatabase> {
   await buildImage();
   const container = await new PostgreSqlContainer(IMAGE)
     .withDatabase('postgres')
@@ -65,6 +86,7 @@ export async function startTestDatabase(): Promise<TestDatabase> {
     .start();
   const url = `${container.getConnectionUri()}?sslmode=disable`;
   await migrate(url);
+  if (options.seed) await seed(url);
   return {
     container,
     url,

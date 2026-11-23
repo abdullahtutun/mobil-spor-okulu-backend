@@ -9,8 +9,8 @@ oturum dosyasında işaretli) · `tamam`.
 |---|---|---|---|
 | S00 | tamam | 2026-10-25 | Plan, envanter, oturum dosyaları, `/oturum` skill'i |
 | S01 | tamam | 2026-11-23 | NestJS 11 iskeleti, zod config, pino, pg+Kysely, /health, Postgres 17+pg_cron imajı, dbmate, Testcontainers e2e |
-| S02 | kısmen | 2026-11-23 | Kapı iki uygulamada (1.1.2+10) ve migration yazıldı; canlıya uygulama ve mağaza sürümü kullanıcıda |
-| S03 | bekliyor | | |
+| S02 | tamam | 2026-11-23 | Kapı yayında; canlı migration kullanıcı tarafından uygulandı; mağaza sürümü 1.1.2+10 kullanıcıda |
+| S03 | tamam | 2026-11-23 | Şema dump'ı + compat (roller, auth, storage, pg_notify), dbmate 0001–0004, seed, canlıyla 9 parmak izi aynı |
 | S04 | bekliyor | | |
 | S05 | bekliyor | | |
 | S06 | bekliyor | | |
@@ -34,14 +34,10 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
 - API alan adı: `api.mobilsporokulu.com` mu, marka başına ayrı mı? (S16)
 - VPS'in boyutu ve Coolify'da çalışan diğer servisler (RAM bütçesi). (S16)
 - Yedeklerin gideceği ikinci yurt içi S3 uyumlu depolama. (S16)
-- Bu Mac'te `docker compose` için kalıcı düzeltme (kullanıcı eylemi, S01'den):
-  `brew install docker-compose docker-buildx`, `~/.docker/config.json`'a
-  `cliPluginsExtraDirs`, `credsStore: desktop` satırını silmek. Ayrıntı:
-  AGENTS.md → "Docker on this Mac".
 
-- S02: `20261027_app_min_versions.sql` canlıya uygulanacak mı (kullanıcı
-  onayı) ve 1.1.2+10 mağazaya ne zaman çıkacak? iOS App Store adresleri
-  (`store_url`) S17'den önce yazılmalı.
+- S02: 1.1.2+10 mağazaya ne zaman çıkacak? (kullanıcıda)
+- S02: iOS App Store adresleri (`app_min_versions.store_url`) S17'den önce
+  yazılmalı.
 
 VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
@@ -49,6 +45,61 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S03 — Veritabanı tabanı (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna bakın. `npm run db:migrate`
+  boş veritabanına canlı şemanın aynısını kuruyor; `test/schema.e2e-spec.ts`
+  sayıları ve dokuz parmak izini (fonksiyon gövdeleri + ACL'ler, politikalar,
+  trigger'lar, tablo ACL/RLS, sütunlar, index'ler, kısıtlar, storage
+  politikaları, cron) canlıdan alınmış sabitlerle karşılaştırıyor — hepsi
+  aynı. Tek bilinçli fark: `request_push_dispatch()` (pg_net + Vault →
+  `pg_notify('push_dispatch', '')`).
+- Kullanıcı eylemi gerekmedi: `supabase db dump --project-ref <ref>`
+  parolasız çalıştı (CLI geçici giriş rolü + IPv4 pooler). Dump'a girmeyenler
+  Supabase MCP ile salt okunur sorgularla alındı. Canlıya yazılmadı.
+- S02 migration'ı (`20261027_app_min_versions.sql`) oturum sırasında
+  kullanıcı tarafından canlıya uygulandı (orkestratör doğruladı). Önce
+  `0005_app_min_versions.sql` olarak taşınmıştı; canlıda olduğu için dump
+  yeniden alındı ve baseline'a girdi, 0005 silindi, 8 satırı
+  `0004_reference_data.sql`'e eklendi. S02 satırı `tamam` yapıldı.
+- Docker Compose sorunu (S01 açık sorusu) kullanıcı tarafından çözüldü
+  (Homebrew docker-compose/buildx, `cliPluginsExtraDirs`, `credsStore`
+  yok); açık sorulardan silindi, AGENTS.md'deki geçici çözüm notu kısaltıldı.
+- Kendi verdiğim küçük kararlar:
+  - **Collation**: canlı veritabanı ICU `en-US`; imajımız libc
+    `en_US.utf8` ile kuruluyordu ve sıralama farklıydı (`_`, büyük/küçük
+    harf). `docker/postgres/Dockerfile`'a `POSTGRES_INITDB_ARGS` (ICU en-US)
+    ve `timezone = 'UTC'` eklendi. Var olan yerel volume'lar eski
+    collation'ı korur → `docker compose down -v`.
+  - **Başvuru verisi migration'ı (0004)**: `roles`, `role_permissions`,
+    `app_min_versions` kişisel veri değil ama şemanın çalışması için şart;
+    dump veri taşımadığı için canlıdan elle alındı.
+  - **auth tabloları canlıdaki sütunlarla bire bir** (oturum dosyası alt
+    küme diyordu): S12 tablo tablo kopyalayabilsin. `mfa_factors` ve
+    `one_time_tokens` da var (`delete_own_account` bunlardan siliyor).
+  - **storage tabloları canlının alt kümesi** (sürümleme/yaşam döngüsü
+    sütunları yok); politikalar, yetkiler ve fonksiyonlar bire bir.
+  - **9 cron işi**: canlıda migration'larda olmayan `expire_trials_job`
+    (panelden açılmış) da var; alındı. INVENTORY'deki `0 17 * * *`
+    zamanlaması canlıda yok.
+  - **pg_stat_statements kurulmadı** (şema kullanmıyor, shared_preload ister).
+  - Baseline **üretilmiş dosya** (`scripts/build-baseline.mjs`); compat
+    kaynakları okunur dosyalar olarak `db/compat/`'ta.
+  - Yönetim migration'ı taşıma aracı: `scripts/import-migration.mjs`
+    (üst düzey begin/commit'i atar, `_rollback/` dosyasını `down`'a koyar).
+  - `api_authenticator` parolasız oluşturuldu (sır repoya girmez).
+  - Supabase CLI backend reposunda `supabase/.temp/` bırakıyor → gitignore.
+- Sonraki oturumlar için:
+  - S04: `api_authenticator`'a parola ver (env), DbContextService testte
+    `asRole()` yardımcısının yaptığını yapar; seed: `startTestDatabase({
+    seed: true })`, kimlikler `test/fixtures/seed-ids.ts` (şifre `Test1234!`).
+  - S05: `auth.*` tabloları GoTrue'nunkiyle aynı; e-posta tekilliği
+    `users_email_partial_key` (SSO dışı). `auth.users` insert'i
+    `handle_new_user` trigger'ını tetikler (yalnızca `is_creator`).
+  - S11: kanal `push_dispatch`, yük boş. Realtime yayını yok.
+  - S12: yukarıdaki notlar S12 dosyasına eklendi (üretilen sütunlar,
+    başvuru tabloları kopyalanmaz, audit_log_entries).
+  - Yönetim reposuna yeni migration gelirse: AGENTS.md → "Schema sync".
 
 ### S02 — Zorunlu güncelleme kapısı (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna bakın. Kod Y ve V `main`

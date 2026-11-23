@@ -75,13 +75,15 @@ src/
   site-lead/         ex site-lead
   health/
 db/
-  migrations/        dbmate SQL migrations (0001_baseline.sql = Supabase dump + compat)
-  compat/            sources of the compatibility layer, kept readable
-docker/postgres/     Postgres 17 image (pg_cron preloaded, cron.database_name=postgres)
+  migrations/        dbmate SQL migrations (0001_baseline.sql = Supabase dump + compat, generated)
+  compat/            sources of the compatibility layer, kept readable (00–03 before the dump, 04–05 after)
+docker/postgres/     Postgres 17 image (pg_cron preloaded, cron.database_name=postgres, ICU en-US, UTC)
 docker-compose.yml   local db (+ optional api profile); Dockerfile = API image
-scripts/             data export/import, backup
+scripts/             build-baseline.mjs, import-migration.mjs, schema-fingerprint.sql; later data export/import, backup
+dumps/               (gitignored) `supabase db dump` output — never committed
 test/                e2e + integration (Testcontainers, real Postgres)
-  support/           database.ts (build image, start, dbmate up), docker-env.ts
+  support/           database.ts (build image, start, dbmate up, seed), docker-env.ts
+  fixtures/          seed.sql (made-up data: two schools, two brands, every role) + seed-ids.ts
 docs/migration/      plan, progress log, session files
 ```
 
@@ -126,28 +128,63 @@ docker compose --profile api up -d --build   # API image too (what Coolify build
 
 - **dbmate** is the npm package (`node_modules/.bin/dbmate`), not a Docker
   image; scripts pass `--no-dump-schema` (no local `pg_dump` needed).
-  `0000_init.sql` is a no-op: dbmate's `up` fails on an empty folder. The
-  baseline comes in S03 as `0001_baseline.sql`; `db:new` names files with a
-  timestamp, which sorts after it.
+  `0000_init.sql` is a no-op: dbmate's `up` fails on an empty folder.
+  dbmate runs every migration in one transaction; a migration must not
+  contain its own `begin;`/`commit;`.
 - The database is `postgres` (as on Supabase), because `pg_cron` runs in
   exactly one database (`cron.database_name`).
 - **Kysely is pinned to 0.28.x**: 0.29 is ESM-only and Jest (CommonJS,
   ts-jest) cannot load it. The app itself would run with 0.29.
 
+## Schema sync (until the cutover, S17)
+
+Supabase stays production until S17, so schema changes keep being written
+as migrations in `../mobil_spor_okulu/supabase/migrations/` and applied to
+Supabase there. The baseline (dump of 2026-11-23) already contains every
+management migration **up to and including `20261027_app_min_versions.sql`**.
+**Every newer management migration is carried over here**:
+
+```bash
+node scripts/import-migration.mjs ../mobil_spor_okulu/supabase/migrations/<file>.sql
+#   → db/migrations/00NN_<name>.sql (next number; top-level begin/commit removed,
+#     _rollback/<file>_rollback.sql becomes `-- migrate:down` if it exists)
+npm run db:migrate && npm run test:e2e
+```
+
+- The script refuses a file it already imported, and warns on
+  Supabase-only references (pg_net, vault, realtime, storage.buckets,
+  extensions) — adapt those by hand (see `db/compat/04_supabase_removed.sql`).
+- `test/schema.e2e-spec.ts` pins counts and fingerprints of the live schema.
+  An imported migration changes them: add its objects to `NOT_YET_LIVE`
+  until it is applied to Supabase; once it is, take the live values again
+  (run `scripts/schema-fingerprint.sql` read-only on Supabase) and fold the
+  delta into `LIVE`. That is the check that our schema still equals live.
+- `0001_baseline.sql` is generated and never edited by hand. It is
+  regenerated only if the baseline itself must change (it should not after
+  S03): `supabase db dump --project-ref <ref> -f dumps/schema.sql` (schema
+  only, no DB password needed — the CLI opens a temporary login role; on
+  colima export `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock`),
+  then `node scripts/build-baseline.mjs`.
+- Things a schema dump does not carry live in their own migrations:
+  storage policies (0002), pg_cron jobs (0003, UTC, includes the
+  panel-made `expire_trials_job`), `roles` / `role_permissions` (0004),
+  bucket rows (`db/compat/03`), the `auth.users` trigger (`db/compat/05`).
+- The database collation must stay ICU `en-US` (as on Supabase): `order by`
+  on names and the fingerprints depend on it. It is set at initdb in
+  `docker/postgres/Dockerfile`; an existing volume keeps its old collation
+  (`docker compose down -v`).
+- `api_authenticator` is created without a password; the environment sets
+  it (`alter role api_authenticator password …`, S04 locally, S16 in
+  production).
+
 ### Docker on this Mac (colima)
 
 Docker runs in **colima** (`colima start --cpu 2 --memory 4`); Docker
-Desktop was removed. Two leftovers break things:
-
-- `~/.docker/cli-plugins/docker-compose` and `docker-buildx` are dangling
-  links into the removed Docker.app → `docker compose` answers
-  "unknown shorthand flag: 'd'". Fix: `brew install docker-compose
-  docker-buildx` and add `"cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]`
-  to `~/.docker/config.json` (and delete the dangling links).
-- `~/.docker/config.json` still says `"credsStore": "desktop"` and
-  `docker-credential-desktop` no longer exists → pulls fail. Fix: remove the
-  `credsStore` line. Until then use a clean config:
-  `export DOCKER_CONFIG=<dir with {} config.json and the cli-plugins>`.
+Desktop was removed. `docker compose` works directly (fixed 2026-11-23:
+`docker-compose`/`docker-buildx` from Homebrew via `cliPluginsExtraDirs`
+in `~/.docker/config.json`, no `credsStore`). Tools that do not read the
+docker context (Testcontainers, `supabase db dump`) need
+`DOCKER_HOST=unix://$HOME/.colima/default/docker.sock`.
 
 Testcontainers needs none of that by hand: `test/support/docker-env.ts`
 (jest-e2e `setupFiles`) sets `DOCKER_HOST=unix://~/.colima/default/docker.sock`

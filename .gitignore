@@ -11,3 +11,6 @@ coverage/
 /storage-data/
 
 .DS_Store
+
+# supabase CLI önbelleği (db dump --project-ref yazar)
+/supabase/.temp/

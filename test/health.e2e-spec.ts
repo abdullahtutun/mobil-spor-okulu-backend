@@ -66,11 +66,10 @@ describe('Sağlık uçları (gerçek Postgres)', () => {
     });
   });
 
-  it('imajda pg_cron yüklü ve kurulabiliyor', async () => {
+  it('pg_cron kurulu (0001_baseline, db/compat/01_extensions.sql)', async () => {
     const client = new Client({ connectionString: db.url });
     await client.connect();
     try {
-      await client.query('create extension pg_cron');
       const { rows } = await client.query<{ extname: string }>(
         "select extname from pg_extension where extname = 'pg_cron'",
       );

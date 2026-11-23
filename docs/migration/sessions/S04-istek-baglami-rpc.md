@@ -8,6 +8,13 @@ ve aynı JSON ile karşılayan `POST /rpc/:name`, ve her isteği doğru rolde
 ve doğru kullanıcı kimliğiyle çalıştıran DB katmanı (K5, K6).
 
 ## Okunacaklar
+- **S03'ten:** `api_authenticator` rolü var (`login noinherit`, anon /
+  authenticated / service_role'e geçebilir) ama **parolası yok**; S04
+  yerel/test için verir (`alter role api_authenticator password …`, env'de
+  ayrı bir bağlantı adresi). Test yardımcıları: `startTestDatabase({ seed:
+  true })`, sabit kimlikler `test/fixtures/seed-ids.ts`; `test/schema.e2e-spec.ts`
+  içindeki `asRole()` aynı bağlamı elle kuruyor (DbContextService gelince
+  ona taşınabilir).
 - `INVENTORY.md` → 2
 - İki uygulamada `lib/core/data/remote/rpc_envelope.dart`,
   `network_error.dart`, `AppException` eşlemesi (hata gövdesinden ne
