@@ -57,7 +57,7 @@ export class AuthorizationHeaderGuard implements CanActivate {
  * Eski Edge Function'lar, aynı adlarla: `POST /functions/<ad>`
  * (Supabase'te `/functions/v1/<ad>`). Gövdeler, yanıtlar, HTTP kodları ve
  * `reason` değerleri bugünküyle aynı; sözleşme `docs/api/functions.md`.
- * Ön kayıt fonksiyonları S10'da buraya eklenir.
+ * Ön kayıt aktarımı `src/pre-registration/`, site formu `src/site-lead/` (S10).
  */
 @Controller('functions')
 @UseGuards(AuthorizationHeaderGuard, RequestAuthGuard)

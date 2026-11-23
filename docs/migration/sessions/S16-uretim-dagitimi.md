@@ -32,7 +32,11 @@ dosyaları ve adım adım kontrol listesini hazırlar, kullanıcı panelde uygul
 - [ ] Alan adı + TLS Coolify proxy'sinden; WebSocket (`/realtime`),
       gövde boyutu sınırı, güvenlik başlıkları, gerçek istemci IP'sinin
       `X-Forwarded-For` ile API'ye gelmesi (S10'un hız sınırı buna bağlı)
-      doğrulanır.
+      doğrulanır. S10: `TRUST_PROXY` yanlışsa bütün veliler vekilin tek
+      IP'sinden gelir ve ön kayıtta saatte 15 sınırı herkese birden işler;
+      fazlaysa istemci `X-Forwarded-For` uydurup sınırı aşar. Env:
+      `IP_HASH_SALT` (Supabase secrets'taki değer — kullanıcıdan),
+      `SITE_LEAD_NOTIFY_TO`, `SITE_ALLOWED_ORIGINS` (boş = varsayılan).
 - [ ] `docs/ops/server-setup.md`: sunucu sertleştirme kontrol listesi —
       SSH yalnızca anahtar, `ufw`, `unattended-upgrades`, `fail2ban`,
       Coolify panelinin alan adı + TLS arkasında olması ve 8000 portunun

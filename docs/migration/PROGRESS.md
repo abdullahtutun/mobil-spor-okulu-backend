@@ -17,7 +17,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S07 | tamam | 2026-11-23 | 26 `.from()` okuması → 23 SECURITY INVOKER fonksiyon (+ S11'e `get_notification`), allow-list `READS`; gerçek PostgREST'le 10 kullanıcıda JSON fark testi |
 | S08 | tamam | 2026-11-23 | storage-api uyumlu `/storage/object/*` (yükleme/upsert, oturumlu ve public okuma, toplu silme), satırlar isteğin rolüyle (8 canlı politika aynen), disk `STORAGE_ROOT`, ad/tür/boyut/sembolik bağ korumaları |
 | S09 | tamam | 2026-11-23 | `POST /functions/{create-user,update-user,create-parent,update-parent,delete-account}`, Edge gövdeleri/kodları bire bir, denetim sırası aynı; 61 e2e (hiyerarşi, yetki, şube, kendi hesap, rol 8, e-posta değişikliği, son genel müdür, hız sınırı) |
-| S10 | bekliyor | | |
+| S10 | tamam | 2026-11-23 | `POST /functions/{submit-pre-registration,convert-pre-registration,bulk-convert-pre-registrations,site-lead}`, Edge gövdeleri/kodları ve denetim sırası aynı; IP özeti + trust proxy; 50 e2e (sınırlar, token, kapsam, kardeş veli, ILIKE, geri alma, CORS) |
 | S11 | bekliyor | | |
 | S12 | bekliyor | | |
 | S13 | bekliyor | | |
@@ -45,6 +45,62 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S10 — Online ön kayıt ve site lead (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/api/functions.md`'ye
+  bakın. Orkestratörle, kullanıcıya sorulmadan çalıştırıldı; plan kararı
+  (K1–K16) değişmedi, migration yok. Canlıya yalnızca salt okunur
+  `list_edge_functions` (submit + iki aktarım `verify_jwt: true`, site-lead
+  `false`) ve 0008 için parmak izi sorgusu.
+- Kendi verdiğim kararlar:
+  - **Turnstile yok**: oturum dosyası istiyordu, ama Edge Function'lar ve
+    yönetim AGENTS.md'si Ekim 2026'da kaldırıldığını söylüyor (kaynak
+    davranış esas). `turnstile_token` atılıyor. Bot koruması site'de bal küpü
+    + `elapsed_ms`, ön kayıtta IP + telefon sınırları.
+  - **İstemci IP'si `trust proxy`'den** (`req.ip`), Edge gibi
+    `x-forwarded-for`'un ilk değerinden değil: ilk değeri istemci yazar,
+    sınır her istekte başka IP uydurularak aşılırdı (testli). Bedeli:
+    `TRUST_PROXY` üretimde doğru olmalı (S16'ya yazıldı).
+  - **Tuz yoksa** JWT_SECRET'tan HMAC ile türetilir (Edge: service key'in
+    ilk 32 karakteri) ve bir kez uyarılır. Aynı `IP_HASH_SALT` verilirse
+    özetler Supabase'tekiyle aynı.
+  - **`submit-pre-registration` başlık istemez** (Supabase'te `verify_jwt`
+    vardı ama istemci herkese açık anon anahtarını taşıyordu — koruma değil);
+    gelen `Authorization` yok sayılır. CORS genel `CORS_ORIGINS`'le (Edge'de
+    `*`): formun paketi zaten `/rpc` okumaları için orada olmalı.
+  - **site-lead'in kendi CORS'u**: genel CORS artık istek başına
+    (`enableCors` delegesi); site-lead yolu atlanır, controller Edge'deki
+    başlıkları yazar. Yönetim kökeni site-lead'e CORS alamaz (testli).
+  - **İki oturumsuz yolun gövdesi ham metin** (`rawTextBody`): bozuk JSON ve
+    büyük gövde Edge'in kendi zarfıyla (500 / 400 / 413) dönsün, genel
+    `PGRST102`'ye düşmesin. Gövde sınırı aşan istek okunup atılır (bağlantı
+    kesilmez); `BODY_LIMIT`'ten sonrası okunmaz.
+  - **PostgREST kuralıyla sunucu içi çağrı** (`RpcService.callAs`):
+    formların gövdesi `create_public_pre_registration_by_token` ve
+    `update_pre_registration`'a bugün olduğu gibi geçiyor; bilinmeyen anahtar
+    / eksik zorunlu alan / tipe uymayan değer Supabase'teki gibi düşüyor
+    (imza hatası metni PostgREST'inki). Gateway'den çağrılamaz.
+  - **Aktarımda yazımlar Edge'deki gibi ayrı adımlar** (S09'un veli
+    yazımlarından farklı olarak tek transaction'a alınmadı): davet e-postası
+    geri alınamıyor, profil davetle açılan hesaba bağlı; RPC zaten tek
+    transaction. Kayıt düşerse o kayıt için açılan hesaplar silinir (testli:
+    ikinci veli reddi, RPC reddi, SMTP reddi).
+  - **Beklenmeyen hata metni**: Edge `error.message`'ı aynen döndürüyordu;
+    burada SQL/auth hatasının metni geçer, iç (TS) hata metni sızmaz
+    (`messageOf`).
+  - **ILIKE**: PostgREST `*`'ı da `%`'ye çeviriyordu; bizde `*` düz karakter
+    (daha sıkı).
+- Sonraki oturumlar için:
+  - S12: `site_leads`, `pre_registration_attempts`, `pre_registration_links`
+    taşınır; IP özetleri aynı tuzla üretildiyse geçerli kalır.
+  - S15: istemci notları S15 dosyasında (submit başlıksız, site-lead adresi,
+    CORS kökenleri).
+  - S16: `TRUST_PROXY`, `IP_HASH_SALT` (Supabase secrets'taki değer
+    kullanıcıdan), `SITE_LEAD_NOTIFY_TO`, `SITE_ALLOWED_ORIGINS`; site-lead
+    bildirimi `SMTP_*_PUBLIC` kutusundan.
+  - Tam e2e bir koşuda 1 test düştü, sonraki üç koşuda (iki tam, üç yalnızca
+    S10) hepsi geçti; düşen test çıktıda kaydedilmemişti (filtrelenmiş
+    çıktı). Zamanlamaya bağlı bir test olabilir; tekrarlarsa bakılmalı.
 
 ### Bakım — 0008 canlıda (2026-11-23)
 - Kullanıcı `20261123_parent_email_change.sql`'i canlıya uyguladı ve

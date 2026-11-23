@@ -5,7 +5,10 @@ import {
   isPgError,
   pgErrorToApiException,
 } from '../common/errors/pg-error.mapper';
-import { DbContextService } from '../db/db-context.service';
+import {
+  DbContextService,
+  type DbRequestContext,
+} from '../db/db-context.service';
 import { allowEntry } from './rpc-allowlist';
 import { buildCallSql, matchSignature } from './rpc-call';
 import { RpcCatalog } from './rpc-catalog.service';
@@ -67,6 +70,44 @@ export class RpcService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Sunucu içinden, PostgREST'in kurallarıyla çağrı (ex Edge Function'ın
+   * `supabase.rpc(name, params)`'ı): allow-list'e bakmaz; ad
+   * `RPC_ALLOWLIST` ya da `SERVER_RPCS`'te olmalı (imzası açılışta okunur).
+   * `undefined` değerli anahtarlar gönderilmemiş sayılır (JSON.stringify
+   * gibi). Uyan imza yoksa `ServerRpcNotFoundError`; SQL hatası olduğu gibi
+   * (`PgError`) fırlar. Tek transaction, verilen rol ve claims.
+   */
+  async callAs(
+    context: DbRequestContext,
+    name: string,
+    params: Record<string, unknown>,
+  ): Promise<unknown> {
+    const args = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v !== undefined),
+    );
+    const keys = Object.keys(args);
+    const { match, ambiguous } = matchSignature(this.catalog.find(name), keys);
+    if (!match || ambiguous) throw new ServerRpcNotFoundError(name, keys);
+    const sql = buildCallSql(match, keys);
+    const values = keys.length > 0 ? [JSON.stringify(args)] : [];
+    return this.db.run(context, async (client) => {
+      const { rows } = await client.query<{ result: unknown }>(sql, values);
+      return rows[0]?.result ?? null;
+    });
+  }
+}
+
+/**
+ * `callAs`'ın "imza yok" hatası: PostgREST'in PGRST202 metniyle. Edge
+ * Function'lar bu metni `error.message` olarak görüyordu.
+ */
+export class ServerRpcNotFoundError extends Error {
+  constructor(name: string, keys: readonly string[]) {
+    super(notFound(name, keys).message);
+    this.name = 'ServerRpcNotFoundError';
   }
 }
 

@@ -278,7 +278,7 @@ describe('Auth akışları: sıfırlama, kayıt, davet (gerçek Postgres)', () =
       });
       expect(dev.message.html).toContain('>Dev Adım Yönetim</span>');
       expect(dev.message.html).toContain('Merhaba Aylin Deneme,');
-      expect(dev.message.attachments[0]).toMatchObject({
+      expect(dev.message.attachments?.[0]).toMatchObject({
         cid: 'brand-logo',
         contentType: 'image/png',
       });

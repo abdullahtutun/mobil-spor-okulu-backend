@@ -62,7 +62,7 @@ read-only.
 src/
   main.ts, app.module.ts, app.setup.ts (body limit, CORS, trust proxy — shared with e2e)
   config/            env schema (zod), typed ConfigService
-  common/            errors, guards, decorators, interceptors, pipes
+  common/            errors, logging, http/ (raw-text-body for the anonymous functions, IpHasher)
   db/                pg Pool, Kysely, DbContextService (withRole / withUser)
   rpc/               POST /rpc/:name gateway + allow-list (rpc-allowlist.ts), pg_proc signature cache
   auth/              request/ (S04: JwtVerifier, RequestAuthGuard, @ReqAuth); S05: /auth/token, /logout, /user (docs/api/auth.md);
@@ -72,8 +72,8 @@ src/
   realtime/          WebSocket gateway fed by LISTEN/NOTIFY
   push/              FCM worker (ex send-push)
   accounts/          S09: POST /functions/{create-user,update-user,create-parent,update-parent,delete-account} (docs/api/functions.md)
-  pre-registration/  ex submit-/convert-/bulk-convert-pre-registration
-  site-lead/         ex site-lead
+  pre-registration/  S10: POST /functions/{submit-pre-registration,convert-pre-registration,bulk-convert-pre-registrations}
+  site-lead/         S10: POST /functions/site-lead (own CORS) + validation copied from the management repo
   health/
 db/
   migrations/        dbmate SQL migrations (0001_baseline.sql = Supabase dump + compat, generated)
@@ -306,6 +306,32 @@ npm run db:migrate && npm run test:e2e
   (`AuthAdminService.reinviteWithin`) run in one transaction via
   `DbContextService.switchRole`; the mail leaves before commit, so any failure
   changes nothing.
+
+## Pre-registration and site leads (S10)
+
+- Contract: `docs/api/functions.md`. Same bodies, HTTP codes and check
+  order as the Edge Functions; envelope `appOk`/`appFailure`
+  (`function-response.ts`).
+- **Anonymous functions** (`submit-pre-registration`, `site-lead`) have no
+  auth guard and read their body as raw text (`app.setup.ts` →
+  `RAW_BODY_ROUTES`), so they answer malformed/oversized bodies with their
+  own envelope. Their SQL runs as service_role; the RPCs stay closed to
+  `anon` (not in the allow-list, no EXECUTE).
+- **Client IP = `req.ip` (`TRUST_PROXY`)**, never the raw first
+  `X-Forwarded-For` value; stored only as `sha256("<IP_HASH_SALT>:<ip>")`
+  (`IpHasher`).
+- **CORS is per request**: `site-lead` skips the global `CORS_ORIGINS` and
+  sets its own headers (`SITE_ALLOWED_ORIGINS`).
+- **`RpcService.callAs`** calls a function with PostgREST's rules from inside
+  the server (key set → signature, `json_to_record` types). Functions only
+  our services call that way and that are not in the allow-list go in
+  `src/rpc/server-rpcs.ts`.
+- Conversion keeps the Edge order and partial success: parents via
+  `AuthAdminService.inviteUser`, reuse only a live role-8 profile of the
+  same school (ILIKE escaped), accounts opened for a failed record are
+  deleted. `src/site-lead/site-lead.validation.ts` is a copy of the
+  management repo's `supabase/functions/site-lead/validation.ts` — change
+  both together.
 
 ## Docker on this Mac (colima)
 

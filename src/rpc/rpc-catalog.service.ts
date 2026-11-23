@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { DbContextService } from '../db/db-context.service';
 import { RPC_ALLOWLIST } from './rpc-allowlist';
+import { SERVER_RPCS } from './server-rpcs';
 
 /** Bir SQL fonksiyonunun çağrı için gereken imzası (`pg_proc`'tan). */
 export interface RpcSignature {
@@ -51,7 +52,8 @@ export class RpcCatalog implements OnApplicationBootstrap {
   }
 
   async load(): Promise<void> {
-    const names = Object.keys(RPC_ALLOWLIST);
+    // Sunucu içi çağrılar da (SERVER_RPCS); gateway yine allow-list'e bakar.
+    const names = [...new Set([...Object.keys(RPC_ALLOWLIST), ...SERVER_RPCS])];
     // pg_catalog herkese açık; en dar rolle okunur.
     const rows = await this.db.withRole('anon', async (client) => {
       const result = await client.query<ProcRow>(

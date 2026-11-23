@@ -4,6 +4,13 @@ import { z } from 'zod';
  * Ortam değişkenlerinin tek şeması. Sonraki oturumlar kendi anahtarlarını
  * buraya ve `.env.example`'a birlikte ekler.
  */
+/** Tanıtım sitesinin kökenleri (ex `site-lead` Edge Function'ının varsayılanı). */
+export const DEFAULT_SITE_ORIGINS = [
+  'https://mobilsporokulu.com',
+  'https://www.mobilsporokulu.com',
+  'http://localhost:4321',
+] as const;
+
 export const envSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
@@ -77,6 +84,26 @@ export const envSchema = z.object({
   SMTP_PASS_DEV_ADIM: z.string().default(''),
   SMTP_USER_PUBLIC: z.string().default(''),
   SMTP_PASS_PUBLIC: z.string().default(''),
+  // S10: oturumsuz formlarda (online ön kayıt, site lead) IP'nin özeti
+  // sha256("<tuz>:<ip>"). Supabase secrets'taki IP_HASH_SALT ile aynı değer
+  // verilirse özetler aynı çıkar. Boşsa JWT_SECRET'tan türetilir (uyarı).
+  IP_HASH_SALT: z.string().default(''),
+  // Tanıtım sitesi formunun (site-lead) CORS kökenleri, virgülle; ex Edge
+  // Function'ın varsayılanı.
+  // Boş değer de varsayılan (Edge: `env(...) || DEFAULT`).
+  SITE_ALLOWED_ORIGINS: z
+    .string()
+    .default('')
+    .transform((value) => {
+      const list = value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter((origin) => origin.length > 0);
+      return list.length > 0 ? list : [...DEFAULT_SITE_ORIGINS];
+    }),
+  // Site talebinin bildirim e-postasının gideceği adres; boşsa e-posta atlanır
+  // (talep yine kaydedilir). Gönderen: public markanın kutusu (SMTP_*_PUBLIC).
+  SITE_LEAD_NOTIFY_TO: z.string().default(''),
   // Tarayıcıdan çağırabilecek kökenler, virgülle. Boşsa CORS kapalı
   // (mobil uygulamaların CORS'a ihtiyacı yok).
   CORS_ORIGINS: z

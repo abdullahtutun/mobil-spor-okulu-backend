@@ -27,12 +27,17 @@ hazırlamak.
       `/storage/` olmalı). Web'de logo `Image.network` ile çekiliyorsa
       kökenin `CORS_ORIGINS`'te olması gerek.
 - [ ] `functions.invoke` çağrıları → `/functions/<ad>` (S09, S10).
+      S10: `submit-pre-registration` başlık istemez (anon anahtarı
+      gerekmez); aktarım iki fonksiyonu `Authorization: Bearer` ister.
+      Form paketinin kökeni `CORS_ORIGINS`'te olmalı (Edge'de `*` idi).
 - [ ] Realtime: gelen kutusu S11 protokolüyle.
 - [ ] Web: üç bundle (`main`, `online-kayit`, `sifre-olusturma`) yeni API
       adresiyle; CORS kökenleri backend `.env.example`'a.
 - [ ] `supabase_flutter` kalkar; Y `AGENTS.md` güncellenir (Supabase'ten söz
       eden bölümler; migration'ların artık backend reposunda olduğu).
-- [ ] Site: `site-lead` adresi yeni backend'e; sitenin kendi testleri/build'i.
+- [ ] Site: `site-lead` adresi yeni backend'e (`<API>/functions/site-lead`,
+      gövde ve yanıt aynı — `docs/api/functions.md`); sitenin kendi
+      testleri/build'i. CORS backend'de `SITE_ALLOWED_ORIGINS`.
 - [ ] Aydınlatma metni: Supabase/yurt dışı aktarım anlatımı yeni barındırma
       bilgisine göre güncellenir (`assets/legal/privacy_policy_tr.md`),
       `PrivacyPolicy.version` artırılır, metin veli uygulamasına birebir

@@ -29,6 +29,18 @@ describe('loadConfig', () => {
     );
   });
 
+  it('SITE_ALLOWED_ORIGINS boşsa site-lead’in varsayılan kökenleri', () => {
+    expect(loadConfig(valid).SITE_ALLOWED_ORIGINS).toEqual([
+      'https://mobilsporokulu.com',
+      'https://www.mobilsporokulu.com',
+      'http://localhost:4321',
+    ]);
+    expect(
+      loadConfig({ ...valid, SITE_ALLOWED_ORIGINS: ' https://x.test ,' })
+        .SITE_ALLOWED_ORIGINS,
+    ).toEqual(['https://x.test']);
+  });
+
   it('PORT metnini sayıya çevirir', () => {
     expect(loadConfig({ ...valid, PORT: '8080' }).PORT).toBe(8080);
   });

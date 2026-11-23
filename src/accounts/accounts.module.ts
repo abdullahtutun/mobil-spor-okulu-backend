@@ -26,5 +26,7 @@ import { StaffAccountsService } from './staff-accounts.service';
     AccountDeletionService,
     AuthorizationHeaderGuard,
   ],
+  // S10 (ön kayıt aktarımı) çağıranı ve okulun markasını aynı yoldan okur.
+  exports: [AccountsRepository, CallerResolver, AuthorizationHeaderGuard],
 })
 export class AccountsModule {}

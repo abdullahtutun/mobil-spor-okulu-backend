@@ -11,7 +11,9 @@ import type { AppConfig } from './config/env.schema';
 import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
+import { PreRegistrationModule } from './pre-registration/pre-registration.module';
 import { RpcModule } from './rpc/rpc.module';
+import { SiteLeadModule } from './site-lead/site-lead.module';
 import { StorageModule } from './storage/storage.module';
 
 @Module({
@@ -35,6 +37,8 @@ import { StorageModule } from './storage/storage.module';
     RpcModule,
     StorageModule,
     AccountsModule,
+    PreRegistrationModule,
+    SiteLeadModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

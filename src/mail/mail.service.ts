@@ -10,10 +10,12 @@ import { BRAND_PROFILES, LOGO_CID, renderEmail } from './email-content';
 export interface MailMessage {
   from: { name: string; address: string };
   to: string;
+  replyTo?: string;
   subject: string;
-  html: string;
+  /** Düz metin e-postada (site talebi bildirimi) yok. */
+  html?: string;
   text: string;
-  attachments: {
+  attachments?: {
     filename: string;
     content: string;
     encoding: 'base64';
@@ -161,6 +163,35 @@ export class MailService implements OnModuleInit {
       { type: email.type, brand: email.brand },
       'Auth e-postası gönderildi',
     );
+  }
+
+  /** Markanın kutusu tanımlı mı (sormak için; fırlatmaz). */
+  hasMailbox(brand: Brand): boolean {
+    return this.mailbox(brand) !== null;
+  }
+
+  /**
+   * Markanın kutusundan düz metin e-posta (S10: site talebi bildirimi;
+   * ex `site-lead`'in `notify`'ı). Kutu yoksa `MailboxNotConfiguredError`.
+   */
+  async sendPlain(
+    brand: Brand,
+    mail: {
+      to: string;
+      subject: string;
+      text: string;
+      replyTo?: string | null;
+    },
+  ): Promise<void> {
+    const mailbox = this.mailbox(brand);
+    if (!mailbox) throw new MailboxNotConfiguredError(brand);
+    await this.transport(brand, mailbox).sendMail({
+      from: { name: BRAND_PROFILES[brand].name, address: mailbox.user },
+      to: mail.to,
+      ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
+      subject: mail.subject,
+      text: mail.text,
+    });
   }
 
   private mailbox(brand: Brand): Mailbox | null {

@@ -110,3 +110,38 @@ export class FunctionsExceptionFilter implements ExceptionFilter {
     res.status(status).json(body);
   }
 }
+
+/**
+ * Ön kayıt ve site fonksiyonlarının (S10) zarfı: `app_ok` / `app_err`'in
+ * Edge Function karşılığı. Başarı `{success: true, code: 'ok', message,
+ * data}`; hata `{success: false, code, message, data: null, error}` (`error`
+ * app_err'in geriye uyumluluk kopyası; `reason` yok — delete-account'tan
+ * farkı bu).
+ */
+export interface AppOk {
+  success: true;
+  code: 'ok';
+  message: string | null;
+  data: unknown;
+}
+
+export const appOk = (message: string | null, data: unknown = null): AppOk => ({
+  success: true,
+  code: 'ok',
+  message,
+  data,
+});
+
+export function appFailure(
+  message: string,
+  code = 'internal',
+  status: number = HttpStatus.BAD_REQUEST,
+): FunctionFailure {
+  return new FunctionFailure(status, {
+    success: false,
+    code,
+    message,
+    data: null,
+    error: message,
+  });
+}
