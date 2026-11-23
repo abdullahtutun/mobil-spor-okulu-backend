@@ -5,8 +5,9 @@ yanıtlar GoTrue'ya yakın tutuldu; uygulamaların Dart tarafı (S13/S14) bunlar
 göre yazılır. Hata gövdesi API'nin tek biçimi: `{ "code", "message" }`;
 `code` GoTrue'nun `error_code` değeri (`invalid_credentials` …).
 
-Kaynak: `src/auth/` (S05). Testler: `test/auth.e2e-spec.ts`,
-`src/auth/**/*.spec.ts`.
+Kaynak: `src/auth/` (S05; S06: `src/auth/flows/`, `src/auth/admin/`,
+`src/mail/`). Testler: `test/auth.e2e-spec.ts`, `test/auth-flows.e2e-spec.ts`,
+`src/auth/**/*.spec.ts`, `src/mail/*.spec.ts`.
 
 ## Token'lar
 
@@ -165,16 +166,172 @@ Push token'ı silmek (önce `delete_push_token`) istemcinin işi, bugünkü gibi
 `SessionRetryClient` bunu "yenile ve bir kez tekrar dene" diye okur
 (e2e'de sınandı: yenilenmiş token'la aynı istek geçer).
 
+## Kodlu akışlar (S06)
+
+Supabase'teki `resetPasswordForEmail` + `verifyOTP(recovery)`,
+`signUp` + `verifyOTP(signup)` + `resend(signup)` ve
+`verifyOTP(tokenHash, invite)` akışlarının karşılığı. Hiçbiri token istemez.
+Ortak kurallar:
+
+- **Hesap taraması kapalı.** `recover` ve `resend` hesap olsun olmasın
+  200 `{}`; `signup` var olan adreste de aynı biçimde bir `user` döner
+  (rastgele id, sahte bir kimlik dahil — Supabase'in boş `identities`'i
+  hesabın varlığını söylüyordu). Gönderim sınırları adres var mı bakılmadan
+  sayılır. E-posta yanıttan **sonra** gönderilir (SMTP süresi yanıta girmez);
+  gönderim hatası yalnızca loglanır.
+- **Her doğrulama reddi aynı:** 403 `otp_expired` ("Token has expired or is
+  invalid") — yanlış, süresi dolmuş, kullanılmış, çok kez denenmiş kod;
+  bilinmeyen adres; yasaklı hesap; uydurma ya da kullanılmış davet
+  bağlantısı. Uygulamalar bu kodu bugün de tanıyor (`localizeAuthError`,
+  `PasswordSetupLink`).
+- **Kodlar hash'li saklanır:** `auth.users.recovery_token` /
+  `confirmation_token` (+ `*_sent_at`) ve `auth.one_time_tokens` satırında
+  HMAC-SHA256(JWT_SECRET'tan HKDF ile türetilmiş anahtar, `tür:kullanıcı:kod`).
+  Davet bağlantısının token'ı 32 rastgele bayt; veritabanında SHA-256'sı.
+- **Süreler:** kod `AUTH_OTP_EXPIRY_SEC` (600 sn — e-posta "10 dakika"
+  diyor), davet `AUTH_INVITE_EXPIRY_SEC` (86400 sn — e-posta "24 saat").
+  Kod başına `AUTH_OTP_MAX_ATTEMPTS` (5) yanlış denemeden sonra kod silinir
+  (sayaç `auth.otp_attempts`'ta, API yeniden başlasa da kalır); yeni kod
+  istenince eskisi geçersiz, sayaç sıfır.
+- E-posta adresi `trim` + küçük harf; biçim hatalıysa 400
+  `email_address_invalid`.
+
+### Sınırlar
+
+Bellekte, tek süreç; hepsi 429 + `Retry-After`.
+
+| Sayaç | Pencere | Varsayılan | Env | `code` |
+|---|---|---|---|---|
+| Aynı adrese gönderim (recover/signup/resend ortak) | — | 60 sn'de 1 | `AUTH_EMAIL_SEND_INTERVAL_SEC` | `over_email_send_rate_limit` |
+| Adres başına gönderim | 1 saat | 5 | `AUTH_EMAIL_HOURLY_LIMIT` | `over_email_send_rate_limit` |
+| IP başına gönderim | 1 saat | 30 | `AUTH_EMAIL_IP_HOURLY_LIMIT` | `over_email_send_rate_limit` |
+| IP başına doğrulama | 5 dk | 30 | `AUTH_VERIFY_IP_LIMIT` | `over_request_rate_limit` |
+
+### `POST /auth/recover`
+
+```json
+{ "email": "veli@ornek.com" }
+```
+
+200 `{}`. Hesap varsa ve yasaklı/silinmiş değilse 6 haneli kod e-postası
+(`recovery`, markanın metni ve kutusu). Uygulama sonra `POST /auth/verify`
+(`type: recovery`) ile oturum alır ve `PUT /auth/user` ile şifreyi yazar
+(bugünkü iki adım; ikisi tek data-source çağrısında kalır).
+
+### `POST /auth/signup`
+
+```json
+{ "email": "…", "password": "…",
+  "data": { "full_name": "…", "phone_number": "…", "is_creator": "true",
+            "privacy_notice_version": "…" } }
+```
+
+200, gövde `user` JSON'u (oturum yok; onay gerekli — GoTrue'nun
+`email_confirmations` açık davranışı). `user_metadata` = `data` + `sub`,
+`email`, `email_verified: false`, `phone_verified: false` (canlıdaki
+kayıtlar gibi). `auth.users` insert'i `handle_new_user`'ı tetikler
+(`is_creator` → genel müdür profili). Kayıt kodu e-postası (`signup`) —
+yeni kayıt okulsuz olduğu için marka `public`.
+
+- Onaysız ve davetsiz var olan adres → şifre ve `data` yenilenir, yeni kod
+  (son kayıt kazanır, önceki kod geçersiz).
+- Onaylı, davetle açılmış ya da yasaklı adres → dokunulmaz, e-posta gitmez;
+  yanıt yeni kayıtla aynı şekilde (rastgele id).
+- Şifre kuralı `PUT /auth/user` ile aynı → 422 `weak_password`.
+- `data`'da sunucunun anahtarları (`brand`, `created_by`,
+  `created_by_manager`, `sub`, `email`, `email_verified`, `phone_verified`)
+  → 422 `validation_failed`. Supabase bunları kabul ediyordu; `brand`
+  e-postanın markasını, `created_by` `save_staff_profile`'ın doğrulamasını
+  belirler.
+- Onaysız hesapla parola girişi → 400 `email_not_confirmed` (S05).
+
+### `POST /auth/resend`
+
+```json
+{ "type": "signup", "email": "…" }
+```
+
+200 `{}`. Onaysız, davetsiz hesaba yeni kayıt kodu; aksi hâlde hiçbir şey.
+Başka `type` → 400 `validation_failed`.
+
+### `POST /auth/verify`
+
+```json
+{ "type": "recovery", "email": "…", "token": "123456" }
+{ "type": "signup",   "email": "…", "token": "123456" }
+{ "type": "invite",   "token_hash": "<bağlantıdaki token_hash>" }
+```
+
+200, yanıt `POST /auth/token`'ınkiyle aynı (yeni oturum, access + refresh
+token). Başarıda kod/bağlantı silinir, `email_confirmed_at` dolar
+(`email_verified: true`), `last_sign_in_at` güncellenir. Ret: 403
+`otp_expired` (yukarıda); sınır: 429.
+
+- `invite`: şifre oluşturma sayfası (`main_set_password.dart`) bağlantıdaki
+  `token_hash`'i gönderir, sonra `PUT /auth/user` ile şifreyi yazar ve
+  `POST /auth/logout?scope=local` ile oturumu kapatır — bugünkü akış.
+  Supabase'in gönderdiği eski biçimli bağlantılar (56 karakter sha224 hex)
+  geçiş gecesi yolda olanlar için kabul edilir (S17'den 24 saat sonra
+  `LEGACY_INVITE_HASH` kaldırılabilir).
+- `access_token`'daki `amr` her akışta `password` (GoTrue `otp`/`invite`
+  yazar; SQL ve uygulamalar `amr` okumuyor).
+
+## E-posta (`src/mail/`)
+
+Yönetim reposundaki `send-email` hook'unun karşılığı. Supabase'te hook açık
+olduğu için bugünkü e-postalar `supabase/templates/*.html`'den değil
+hook'un `email_content.ts`'inden çıkıyor; `src/mail/email-content.ts` onun
+birebir kopyası (28 tür×marka×ad bileşiminde çıktısı karşılaştırıldı, fark
+yok), logolar `brand-logos.ts` (aynı base64). Şablon dosyaları (hook
+kapalıyken Supabase'in yedeği) taşınmadı: bizde yedek SMTP yolu yok.
+
+- Marka `user_metadata.brand`'den (`sync_user_brand` yazar; yoksa `public`).
+  Davette marka çağıranın verdiği okul markası, metadata'ya da yazılır.
+- Gönderen: `<marka adı> <SMTP_USER_<MARKA>>`; adres yalnızca env'de.
+  Bir markanın kutusu tanımlı değilse o markanın e-postası **gitmez**
+  (`MailboxNotConfiguredError`; açılışta uyarı loglanır) — öbür markanın
+  adresine düşmek yok. Kullanıcı tetiklediği akışta (recover/signup/resend)
+  hata loglanır, yanıt değişmez; davette hata fırlar ve hiçbir şey yazılmaz.
+- `SMTP_HOST`/`SMTP_PORT` (varsayılan Hostinger 465, SMTPS). Bağlantı
+  zaman aşımları 10/10/20 sn. Supabase'teki 4 sn'lik hook bütçesi
+  (`deadline.ts`) gerekmedi: e-posta yanıttan sonra gider.
+- Testler gerçek SMTP'ye gitmez: `MAIL_TRANSPORT_FACTORY`
+  (`test/support/fake-mail.ts` → `FakeMailbox`).
+
+## `AuthAdminService` (yalnızca sunucu içi)
+
+GoTrue'nun `auth.admin.*` karşılığı; HTTP ucu **yok**. S09 (hesap işlemleri)
+ve S10 (ön kayıt aktarımı) yetkiyi SQL'e sorduktan sonra çağırır.
+
+| Metot | GoTrue | Davranış |
+|---|---|---|
+| `inviteUser(email, metadata, brand)` | `inviteUserByEmail(email, parentInviteOptions(brand, name))` | Onaysız kullanıcı (`invited_at`, şifresiz) + kimlik + davet bağlantısı `passwordSetupUrl(brand)?token_hash=…&type=invite`; `metadata` + `brand` → `user_metadata`. Onaylı adres → `email_exists` (422). Onaysız var olan → yeniden davet (eski bağlantı geçersiz). Kutusu yoksa hiçbir şey yazmadan `MailboxNotConfiguredError`; SMTP reddederse yeni açılan kullanıcı silinir ve hata fırlar. |
+| `createUser({ email, password, emailConfirm, userMetadata })` | `admin.createUser` | Şifre kuralı; var olan adres → `email_exists`. |
+| `updateUserById(id, { email?, password? })` | `admin.updateUserById` | Yeni e-posta onaylı sayılır, kimlik de güncellenir; şifre değişince bütün oturumlar kapanır; çakışan adres → `email_exists`; yok → `user_not_found`. |
+| `banUser(id, until \| null)` | `ban_duration` | `banned_until`; yasakta oturumlar kapanır. |
+| `deleteUser(id)` | `admin.deleteUser` | Kalıcı silme (kimlik, oturum, `profiles` cascade). Yalnızca geri alma adımı için; hesap silme (KVKK) `delete_own_account`'tur (S09). |
+
+Hatalar `ApiException` (`.code`: `email_exists`, `user_not_found`,
+`weak_password`, `email_address_invalid`).
+
 ## Veritabanı
 
 Auth modülü auth tablolarına `auth_service` rolüyle erişir
 (`db/migrations/0005_auth_service_role.sql`; `DbContextService.asAuthService`).
-Bu rol yalnızca `auth.users` (okuma; `last_sign_in_at`, `updated_at`,
-`encrypted_password`, `raw_user_meta_data` güncelleme), `auth.identities`
-(okuma), `auth.sessions` ve `auth.refresh_tokens` (tam) yetkisine sahip;
-public şemasına erişemez, RLS'i aşamaz. S06/S09 gerektikçe genişletir.
+Bu rol yalnızca `auth.users` (okuma, ekleme, silme; `last_sign_in_at`,
+`updated_at`, `encrypted_password`, `raw_user_meta_data`, `email`,
+`email_confirmed_at`, `invited_at`, `confirmation_token`/`_sent_at`,
+`recovery_token`/`_sent_at`, `banned_until` güncelleme), `auth.identities`
+(okuma, ekleme, güncelleme), `auth.sessions`, `auth.refresh_tokens`,
+`auth.one_time_tokens` ve `auth.otp_attempts` (tam) yetkisine sahip
+(0005 + `0006_auth_flows.sql`); public şemasına erişemez, RLS'i aşamaz.
+`auth.users` insert'i `handle_new_user`'ı tetikler; o SECURITY DEFINER
+olduğu için profil satırını postgres olarak açar. Yetki listesi
+`test/schema.e2e-spec.ts`'te sabit.
 
 ## Sonraki oturumlar
 
-S06 buraya `/auth/recover`, `/auth/verify`, `/auth/signup`, `/auth/resend`
-uçlarını ekler (oturum yanıtı yukarıdaki token yanıtıyla aynı).
+- S09/S10: `AuthAdminService` (yukarıda); okulun markası `schools.brand`'den
+  (S09'da `schoolBrand` karşılığı yazılır).
+- S13/S14: istemci `POST <api>/auth/recover|signup|resend|verify`; hata
+  `code`'ları GoTrue'nunkilerle aynı adlarda.

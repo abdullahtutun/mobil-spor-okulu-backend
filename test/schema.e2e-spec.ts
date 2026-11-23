@@ -232,7 +232,7 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
       });
     });
 
-    it('auth_service: yalnızca auth tabloları, public’e erişimi yok, bypassrls değil', async () => {
+    it('auth_service: yalnızca auth tabloları (0005 + 0006), public’e erişimi yok, bypassrls değil', async () => {
       const { rows } = await client.query<{ t: string; p: string }>(
         `select table_schema || '.' || table_name as t,
                 string_agg(privilege_type, ',' order by privilege_type) as p
@@ -240,10 +240,13 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
           where grantee = 'auth_service' group by 1 order by 1`,
       );
       expect(rows).toEqual([
-        { t: 'auth.identities', p: 'SELECT' },
+        { t: 'auth.identities', p: 'INSERT,SELECT,UPDATE' },
+        { t: 'auth.one_time_tokens', p: 'DELETE,INSERT,SELECT,UPDATE' },
+        { t: 'auth.otp_attempts', p: 'DELETE,INSERT,SELECT,UPDATE' },
         { t: 'auth.refresh_tokens', p: 'DELETE,INSERT,SELECT,UPDATE' },
         { t: 'auth.sessions', p: 'DELETE,INSERT,SELECT,UPDATE' },
-        { t: 'auth.users', p: 'SELECT' },
+        // S06 (0006): kayıt/davet satır açar, admin deleteUser siler.
+        { t: 'auth.users', p: 'DELETE,INSERT,SELECT' },
       ]);
       const { rows: cols } = await client.query<{ c: string }>(
         `select column_name as c from information_schema.column_privileges
@@ -251,9 +254,17 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
             and privilege_type = 'UPDATE' order by 1`,
       );
       expect(cols.map((r) => r.c)).toEqual([
+        'banned_until',
+        'confirmation_sent_at',
+        'confirmation_token',
+        'email',
+        'email_confirmed_at',
         'encrypted_password',
+        'invited_at',
         'last_sign_in_at',
         'raw_user_meta_data',
+        'recovery_sent_at',
+        'recovery_token',
         'updated_at',
       ]);
       const { rows: flags } = await client.query(

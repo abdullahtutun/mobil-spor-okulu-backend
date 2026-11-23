@@ -13,7 +13,9 @@ taşımak. Dart tarafında yalnızca adres değişmeli.
 - Y `features/registration/data/source/{users,coaches,parents}/`,
   `features/account_deletion/`; V `features/account_deletion/`
 - Y `AGENTS.md` → "Account deletion", "Brands", pasif hesaplar
-- S06'nın `AuthAdminService`'i
+- S06'nın `AuthAdminService`'i (`src/auth/admin/auth-admin.service.ts`;
+  metotlar ve hatalar `docs/api/auth.md` → "AuthAdminService"). Okulun
+  markasını okuyan `schoolBrand` karşılığı S09'da yazılır (okunamazsa hata).
 
 ## Yapılacaklar
 - [ ] `POST /functions/<ad>` (adlar aynı; yeni yol `docs/api/functions.md`'de).

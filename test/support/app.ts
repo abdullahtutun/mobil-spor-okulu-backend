@@ -6,7 +6,9 @@ import { AppModule } from '../../src/app.module';
 import { configureApp } from '../../src/app.setup';
 import { APP_CONFIG } from '../../src/config/config.module';
 import type { AppConfig } from '../../src/config/env.schema';
+import { MAIL_TRANSPORT_FACTORY } from '../../src/mail/mail.service';
 import type { TestDatabase } from './database';
+import { FakeMailbox } from './fake-mail';
 
 /** e2e testlerinde token imzalayan anahtar (yalnızca test). */
 export const TEST_JWT_SECRET = 'e2e-test-icin-en-az-otuz-iki-karakter';
@@ -35,11 +37,25 @@ export function setTestEnv(
     AUTH_LOGIN_FAILURE_LIMIT: '100000',
     AUTH_LOGIN_EMAIL_FAILURE_LIMIT: '100000',
     AUTH_REFRESH_REUSE_INTERVAL_SEC: '10',
+    AUTH_EMAIL_SEND_INTERVAL_SEC: '0',
+    AUTH_EMAIL_HOURLY_LIMIT: '100000',
+    AUTH_EMAIL_IP_HOURLY_LIMIT: '100000',
+    AUTH_VERIFY_IP_LIMIT: '100000',
+    // Sahte kutu (FakeMailbox) kullanılır; değerler yalnızca "tanımlı" olsun diye.
+    SMTP_HOST: 'smtp.invalid',
+    SMTP_PORT: '465',
+    SMTP_USER_DEV_ADIM: 'gonder@devadim.test',
+    SMTP_PASS_DEV_ADIM: 'test-parola',
+    SMTP_USER_PUBLIC: 'noreply@mobilsporokulu.test',
+    SMTP_PASS_PUBLIC: 'test-parola',
     ...extra,
   });
 }
 
-/** `main.ts` ile aynı kurulumla (gövde sınırı, CORS) bir uygulama açar. */
+/**
+ * `main.ts` ile aynı kurulumla (gövde sınırı, CORS) bir uygulama açar.
+ * E-postalar gerçek SMTP'ye değil `FakeMailbox`'a gider: `mailboxOf(app)`.
+ */
 export async function createTestApp(
   db: TestDatabase,
   extra: Record<string, string> = {},
@@ -47,7 +63,10 @@ export async function createTestApp(
   setTestEnv(db, extra);
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  })
+    .overrideProvider(MAIL_TRANSPORT_FACTORY)
+    .useValue(new FakeMailbox())
+    .compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({
     bodyParser: false,
   });
@@ -55,4 +74,9 @@ export async function createTestApp(
   app.enableShutdownHooks();
   await app.init();
   return app;
+}
+
+/** Uygulamanın sahte posta kutusu. */
+export function mailboxOf(app: INestApplication): FakeMailbox {
+  return app.get<FakeMailbox>(MAIL_TRANSPORT_FACTORY);
 }

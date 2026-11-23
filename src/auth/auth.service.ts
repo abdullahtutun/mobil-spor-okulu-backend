@@ -7,38 +7,22 @@ import { DbContextService } from '../db/db-context.service';
 import {
   authError,
   invalidCredentials,
+  rateLimited,
   refreshTokenNotFound,
 } from './auth.errors';
 import {
   AuthRepository,
   type ClientInfo,
-  type SessionRow,
   type UserRow,
 } from './auth.repository';
 import { PasswordHasher } from './password/password-hasher';
 import { passwordPolicyError } from './password/password-policy';
 import { LoginRateLimiter } from './rate-limit/login-rate-limiter';
-import {
-  AccessTokenIssuer,
-  hashRefreshToken,
-  newRefreshToken,
-} from './token/tokens';
-import {
-  isLockedOut,
-  toTokenSubject,
-  toUserJson,
-  type UserJson,
-} from './user.mapper';
+import { SessionOpener, type SessionResponse } from './session/session-opener';
+import { hashRefreshToken, newRefreshToken } from './token/tokens';
+import { isLockedOut, toUserJson, type UserJson } from './user.mapper';
 
-/** `POST /auth/token` yanıtı — GoTrue'nun `AccessTokenResponse`'u. */
-export interface SessionResponse {
-  access_token: string;
-  token_type: 'bearer';
-  expires_in: number;
-  expires_at: number;
-  refresh_token: string;
-  user: UserJson;
-}
+export type { SessionResponse } from './session/session-opener';
 
 export type LogoutScope = 'global' | 'local' | 'others';
 
@@ -83,7 +67,7 @@ export class AuthService {
     private readonly repo: AuthRepository,
     private readonly hasher: PasswordHasher,
     private readonly limiter: LoginRateLimiter,
-    private readonly tokens: AccessTokenIssuer,
+    private readonly sessions: SessionOpener,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -98,7 +82,8 @@ export class AuthService {
     const ipKey = client.ip ?? 'unknown';
 
     const retryAfter = this.limiter.tryAttempt(ipKey, email);
-    if (retryAfter > 0) throw rateLimited(retryAfter);
+    if (retryAfter > 0)
+      throw rateLimited('over_request_rate_limit', retryAfter);
 
     const user = await this.db.asAuthService((c) =>
       this.repo.findUserByEmail(c, email),
@@ -125,19 +110,7 @@ export class AuthService {
       );
     }
 
-    return this.db.asAuthService(async (c) => {
-      const lastSignIn = await this.repo.touchLastSignIn(c, user.id);
-      const session = await this.repo.createSession(c, user.id, client);
-      const refresh = newRefreshToken();
-      await this.repo.insertRefreshToken(c, {
-        hash: refresh.hash,
-        userId: user.id,
-        sessionId: session.id,
-        parent: null,
-      });
-      const fresh = { ...user, last_sign_in_at: lastSignIn };
-      return this.respond(c, fresh, session, refresh.token);
-    });
+    return this.db.asAuthService((c) => this.sessions.open(c, user, client));
   }
 
   // ── grant_type=refresh_token ──────────────────────────────────────────
@@ -222,7 +195,7 @@ export class AuthService {
         parent: parentHash,
       });
       await this.repo.touchSession(c, session.id, client);
-      return this.respond(c, user, session, next.token);
+      return this.sessions.respond(c, user, session, next.token);
     });
     // Reddi transaction'ın içinden fırlatmak yapılanı (oturumun silinmesini)
     // geri alırdı; hata dönüş değeri olarak çıkar, commit'ten sonra fırlar.
@@ -349,36 +322,4 @@ export class AuthService {
     }
     return user;
   }
-
-  private async respond(
-    c: PoolClient,
-    user: UserRow,
-    session: SessionRow,
-    refreshToken: string,
-  ): Promise<SessionResponse> {
-    const access = this.tokens.issue(
-      toTokenSubject(user),
-      session.id,
-      Math.floor(session.created_at.getTime() / 1000),
-    );
-    return {
-      access_token: access.token,
-      token_type: 'bearer',
-      expires_in: access.expiresIn,
-      expires_at: access.expiresAt,
-      refresh_token: refreshToken,
-      user: toUserJson(user, await this.repo.identitiesOf(c, user.id)),
-    };
-  }
-}
-
-function rateLimited(retryAfterSec: number): ApiException {
-  const error = authError(
-    HttpStatus.TOO_MANY_REQUESTS,
-    'over_request_rate_limit',
-    'Request rate limit reached',
-  );
-  (error as ApiException & { retryAfterSec?: number }).retryAfterSec =
-    retryAfterSec;
-  return error;
 }

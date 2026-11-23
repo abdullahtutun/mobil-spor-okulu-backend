@@ -13,9 +13,8 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { ApiException } from '../common/errors/api-error';
 import { authError } from './auth.errors';
-import type { ClientInfo } from './auth.repository';
+import { clientInfo, parseAuthBody, withRetryAfter } from './auth.http';
 import {
   AuthService,
   type LogoutScope,
@@ -45,19 +44,8 @@ const updateUserBody = z
   // reddediyor (AGENTS.md → "Brands").
   .strict();
 
-function parse<T>(schema: z.ZodType<T>, value: unknown): T {
-  const result = schema.safeParse(value);
-  if (!result.success) {
-    throw authError(
-      HttpStatus.BAD_REQUEST,
-      'validation_failed',
-      result.error.issues
-        .map((i) => `${i.path.join('.') || '(gövde)'}: ${i.message}`)
-        .join('; '),
-    );
-  }
-  return result.data;
-}
+const parse = <T>(schema: z.ZodType<T>, value: unknown): T =>
+  parseAuthBody(schema, value);
 
 /**
  * GoTrue'nun `/auth/v1/*` uçlarının karşılığı (S05; sözleşme
@@ -81,21 +69,15 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<SessionResponse> {
     const client = clientInfo(req);
-    try {
-      if (grantType === 'password') {
-        const { email, password } = parse(passwordGrant, body ?? {});
-        return await this.auth.signInWithPassword(email, password, client);
-      }
-      if (grantType === 'refresh_token') {
-        const { refresh_token } = parse(refreshGrant, body ?? {});
-        return await this.auth.refresh(refresh_token, client);
-      }
-    } catch (error) {
-      const retryAfter = (error as { retryAfterSec?: number }).retryAfterSec;
-      if (error instanceof ApiException && retryAfter !== undefined) {
-        res.setHeader('Retry-After', String(retryAfter));
-      }
-      throw error;
+    if (grantType === 'password') {
+      const { email, password } = parse(passwordGrant, body ?? {});
+      return withRetryAfter(res, () =>
+        this.auth.signInWithPassword(email, password, client),
+      );
+    }
+    if (grantType === 'refresh_token') {
+      const { refresh_token } = parse(refreshGrant, body ?? {});
+      return this.auth.refresh(refresh_token, client);
     }
     throw authError(
       HttpStatus.BAD_REQUEST,
@@ -158,20 +140,4 @@ export class AuthController {
           : null,
     };
   }
-}
-
-/** Oturum satırına yazılan istemci bilgisi (IP `trust proxy`'ye göre). */
-function clientInfo(req: Request): ClientInfo {
-  const ua = req.headers['user-agent'];
-  return {
-    ip: normalizeIp(req.ip),
-    userAgent: typeof ua === 'string' && ua !== '' ? ua.slice(0, 512) : null,
-  };
-}
-
-function normalizeIp(ip: string | undefined): string | null {
-  if (!ip) return null;
-  // IPv4'ün IPv6 gösterimi (::ffff:1.2.3.4) düz IPv4'e: aynı istemci tek anahtar.
-  const v4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
-  return v4 ? v4[1] : ip;
 }

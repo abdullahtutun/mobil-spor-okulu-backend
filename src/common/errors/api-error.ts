@@ -38,6 +38,11 @@ export class ApiException extends HttpException {
     super(body, status);
   }
 
+  /** Gövdedeki `code` (sunucu içi çağıranlar — ör. AuthAdminService — için). */
+  get code(): string {
+    return (this.getResponse() as ApiErrorBody).code;
+  }
+
   static of(
     status: number,
     code: string,

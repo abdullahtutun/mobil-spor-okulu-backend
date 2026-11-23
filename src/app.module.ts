@@ -9,6 +9,7 @@ import { APP_CONFIG, ConfigModule } from './config/config.module';
 import type { AppConfig } from './config/env.schema';
 import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
+import { MailModule } from './mail/mail.module';
 import { RpcModule } from './rpc/rpc.module';
 
 @Module({
@@ -26,6 +27,7 @@ import { RpcModule } from './rpc/rpc.module';
       ],
     }),
     DbModule,
+    MailModule,
     AuthModule,
     HealthModule,
     RpcModule,

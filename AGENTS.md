@@ -65,8 +65,9 @@ src/
   common/            errors, guards, decorators, interceptors, pipes
   db/                pg Pool, Kysely, DbContextService (withRole / withUser)
   rpc/               POST /rpc/:name gateway + allow-list (rpc-allowlist.ts), pg_proc signature cache
-  auth/              request/ (S04: JwtVerifier, RequestAuthGuard, @ReqAuth); S05: /auth/token, /logout, /user (docs/api/auth.md); S06 OTP flows
-  mail/              per-brand SMTP + templates
+  auth/              request/ (S04: JwtVerifier, RequestAuthGuard, @ReqAuth); S05: /auth/token, /logout, /user (docs/api/auth.md);
+                     S06: flows/ (/auth/recover, /signup, /resend, /verify), admin/ (AuthAdminService, server-only), otp/
+  mail/              per-brand SMTP (MailService) + email-content.ts / brand-logos.ts (copies of the management send-email hook)
   storage/           buckets on disk + storage.objects
   realtime/          WebSocket gateway fed by LISTEN/NOTIFY
   push/              FCM worker (ex send-push)
@@ -82,7 +83,7 @@ docker-compose.yml   local db (+ optional api profile); Dockerfile = API image
 scripts/             build-baseline.mjs, import-migration.mjs, schema-fingerprint.sql; later data export/import, backup
 dumps/               (gitignored) `supabase db dump` output — never committed
 test/                e2e + integration (Testcontainers, real Postgres)
-  support/           database.ts (build image, start, dbmate up, seed), docker-env.ts
+  support/           database.ts (build image, start, dbmate up, seed), docker-env.ts, fake-mail.ts (FakeMailbox)
   fixtures/          seed.sql (made-up data: two schools, two brands, every role) + seed-ids.ts
 docs/migration/      plan, progress log, session files
 docs/api/            API contracts the apps are rewritten against (auth.md)
@@ -219,6 +220,25 @@ npm run db:migrate && npm run test:e2e
   whether the account exists. Keep it that way.
 - Passive accounts, roles and brands are **not** checked at login — that
   stays in the apps via `get_session_data`.
+
+## Auth flows and e-mail (S06)
+
+- Code flows (`/auth/recover`, `/signup`, `/resend`, `/verify`) and the
+  server-only `AuthAdminService` (invite/create/update/ban/delete — S09/S10
+  use it). Contract and rules: `docs/api/auth.md` → "Kodlu akışlar".
+- **No account enumeration**: recover/resend always `{}`, signup on an
+  existing address returns a same-shaped fake user, send limits count
+  addresses whether or not they exist, every verify refusal is 403
+  `otp_expired`. Keep it that way.
+- Codes are stored as HMAC (key derived from `JWT_SECRET`), invite tokens as
+  SHA-256; per-code wrong attempts in `auth.otp_attempts` (0006).
+- **E-mail follows the account's brand** (`user_metadata.brand`; invite:
+  the school's brand passed in). A brand without `SMTP_USER_*`/`SMTP_PASS_*`
+  sends nothing and errors — never a fallback to the other brand.
+  `src/mail/email-content.ts` and `brand-logos.ts` are copies of the
+  management repo's `supabase/functions/send-email/`; change both together.
+- Tests never use SMTP: `createTestApp` overrides `MAIL_TRANSPORT_FACTORY`
+  with `FakeMailbox` (`mailboxOf(app)`; `codeOf`, `inviteLinkOf`).
 
 ## Docker on this Mac (colima)
 

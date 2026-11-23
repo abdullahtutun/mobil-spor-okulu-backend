@@ -21,7 +21,11 @@ export type AuthErrorCode =
   | 'unsupported_grant_type'
   | 'weak_password'
   | 'same_password'
-  | 'over_request_rate_limit';
+  | 'over_request_rate_limit'
+  | 'over_email_send_rate_limit'
+  | 'otp_expired'
+  | 'email_exists'
+  | 'email_address_invalid';
 
 export function authError(
   status: HttpStatus,
@@ -48,4 +52,37 @@ export const refreshTokenNotFound = () =>
     HttpStatus.BAD_REQUEST,
     'refresh_token_not_found',
     'Invalid Refresh Token: Refresh Token Not Found',
+  );
+
+/**
+ * Sınır aşıldı (429). `retryAfterSec` controller'da `Retry-After` başlığına
+ * yazılır.
+ */
+export function rateLimited(
+  code: 'over_request_rate_limit' | 'over_email_send_rate_limit',
+  retryAfterSec: number,
+): ApiException {
+  const error = authError(
+    HttpStatus.TOO_MANY_REQUESTS,
+    code,
+    code === 'over_email_send_rate_limit'
+      ? 'Email rate limit exceeded'
+      : 'Request rate limit reached',
+  );
+  (error as ApiException & { retryAfterSec?: number }).retryAfterSec =
+    retryAfterSec;
+  return error;
+}
+
+/**
+ * Yanlış, süresi dolmuş, kullanılmış ya da hiç olmayan kod / davet
+ * bağlantısı: hepsi aynı yanıt (GoTrue gibi `otp_expired`, 403). Uygulamalar
+ * bu kodu tanıyor (`localizeAuthError`, `PasswordSetupLink`); hesabın
+ * varlığı da sızmaz.
+ */
+export const otpExpired = () =>
+  authError(
+    HttpStatus.FORBIDDEN,
+    'otp_expired',
+    'Token has expired or is invalid',
   );

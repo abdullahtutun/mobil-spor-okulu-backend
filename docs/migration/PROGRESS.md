@@ -13,7 +13,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S03 | tamam | 2026-11-23 | Şema dump'ı + compat (roller, auth, storage, pg_notify), dbmate 0001–0004, seed, canlıyla 9 parmak izi aynı |
 | S04 | tamam | 2026-11-23 | DbContextService (rol+claims+timeout), JWT doğrulama, `POST /rpc/:name` + 65'lik allow-list, PostgREST hata eşlemesi, CORS/gövde/hız sınırı |
 | S05 | tamam | 2026-11-23 | Parola girişi, JWT (GoTrue claim'leri), hash'li dönen refresh token + çalınma tespiti, logout kapsamları, /auth/user, kaba kuvvet sınırları, `auth_service` rolü |
-| S06 | bekliyor | | |
+| S06 | tamam | 2026-11-23 | Kodla sıfırlama, açık kayıt + kod + resend, davet bağlantısı, `AuthAdminService`, marka başına SMTP (hook içeriği birebir), hash'li kodlar + deneme sayacı, taramasız yanıtlar, gönderim/doğrulama sınırları |
 | S07 | bekliyor | | |
 | S08 | bekliyor | | |
 | S09 | bekliyor | | |
@@ -45,6 +45,68 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S06 — Auth akışları ve e-posta (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna bakın; sözleşme
+  `docs/api/auth.md` → "Kodlu akışlar", "E-posta", "AuthAdminService".
+  Orkestratörle, kullanıcıya sorulmadan çalıştırıldı; plan kararı (K1–K16)
+  değişmedi. Canlıya yalnızca bir salt okunur toplu sorgu atıldı (sayılar,
+  uzunluklar): 7 kullanıcı, onaysız 0, davetli 0, `one_time_tokens` 3
+  (yalnızca `recovery_token`, 56/61 karakter: GoTrue'nun sha224 ve pkce
+  biçimleri), kimlikler `email` sağlayıcısı.
+- Kendi verdiğim kararlar:
+  - **E-posta içeriği hook'tan**: Supabase'te Send Email Hook açık, yani
+    bugünkü e-postalar `supabase/templates/*.html`'den değil
+    `send-email/email_content.ts`'ten çıkıyor. O dosya (ve logolar) birebir
+    kopyalandı; şablonlar (hook kapalıyken yedek) taşınmadı. Çıktı 28
+    bileşimde karşılaştırıldı, fark yok.
+  - **Kod saklama**: GoTrue'nun sütunları (`recovery_token`,
+    `confirmation_token`, `one_time_tokens`) ama HMAC-SHA256 (anahtar
+    JWT_SECRET'tan HKDF; ayrı sır yok — JWT_SECRET değişirse bekleyen kodlar
+    düşer). Davet token'ı 32 bayt, DB'de SHA-256. Deneme sayacı ayrı tablo
+    `auth.otp_attempts` (canlıyla bire bir auth tablolarına sütun eklenmedi).
+  - **Süreler**: kod 600 sn, davet 86400 sn — e-posta metinleri öyle diyor
+    (panel ayarı okunamıyor). Kod başına 5 yanlış deneme.
+  - **Sınırlar hesap var mı bakılmadan**: aynı adrese 60 sn'de bir,
+    adres başına saatte 5, IP başına saatte 30 gönderim; IP başına 5 dk'da
+    30 doğrulama. Supabase bilinen adreste 429 dönerek hesabı belli
+    ediyordu; bizde bilinmeyen adres de aynı sınıra takılır.
+  - **Kayıt taraması**: var olan adreste sahte kullanıcı, gerçek yanıtla
+    aynı şekilde (sahte kimlik dahil — Supabase'in boş `identities`'i hesabı
+    belli ediyordu). Onaysız+davetsiz adrese yeniden kayıt şifreyi
+    yeniler (GoTrue gibi; ön-ele-geçirme sırasında son kayıt kazanır);
+    davetli hesaba kayıt dokunmaz (davet bağlantısı bozulmasın).
+  - **Kayıtta sunucu metadata anahtarları** (`brand`, `created_by`,
+    `created_by_manager`, GoTrue alanları) 422 — Supabase kabul ediyordu.
+  - **E-posta yanıttan sonra** gider (kullanıcı tetiklediği akışlarda); hata
+    loglanır. Supabase'in 4 sn hook bütçesi (`deadline.ts`) gerekmedi.
+    Davette ise beklenir; kutu yoksa hiçbir şey yazılmaz, SMTP reddinde yeni
+    kullanıcı silinir.
+  - **Supabase'in eski biçimli davet bağlantıları** (56 karakter) geçiş
+    gecesi yolda olanlar için kabul ediliyor (S17'den 24 saat sonra
+    `LEGACY_INVITE_HASH` silinebilir).
+  - `amr` her akışta `password` (kimse okumuyor).
+- Sonraki oturumlar için:
+  - S09: `AuthAdminService` (`app.get`/DI ile; `AuthModule` export eder):
+    `createUser` (personel; `userMetadata.created_by` = çağıran),
+    `inviteUser(email, {created_by_manager, name}, brand)` (veli; marka
+    `schools.brand`'den — `schoolBrand` karşılığını S09 yazar, okunamazsa
+    hata), `updateUserById`, `deleteUser` (geri alma). Hatalar
+    `ApiException.code` (`email_exists`, `user_not_found`, `weak_password`).
+    Hesap silme `delete_own_account`; `deleteUser` değil.
+  - S10: ön kayıt aktarımındaki davetler aynı `inviteUser`.
+  - S12: bekleyen kodlar/davetler taşınmaz (kısa ömürlü); `JWT_SECRET`
+    değişirse bekleyen kodlar geçersiz olur.
+  - S13/S14: istemci uçları `docs/api/auth.md`; sıfırlama iki adım kalır
+    (verify → `PUT /auth/user`), davet sayfası verify(invite) →
+    `PUT /auth/user` → `logout?scope=local`. Hata kodları bugünküyle aynı
+    adlar (`otp_expired`, `over_email_send_rate_limit`, `weak_password`,
+    `same_password`, `validation_failed`); yeni `email_address_invalid`.
+  - S16: `SMTP_USER_DEV_ADIM`/`SMTP_PASS_DEV_ADIM`, `SMTP_USER_PUBLIC`/
+    `SMTP_PASS_PUBLIC` (Supabase secrets'takiler; apex alan adı kutuları)
+    Coolify env'ine; VPS'ten 465'e çıkış açık olmalı. Sayaçlar bellekte.
+  - S17: e-posta gönderen artık bu backend — Supabase hook'u kapatılmadan
+    önce yeni backend'in kutuları denenmeli.
 
 ### S05 — Auth çekirdeği (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna bakın; sözleşme

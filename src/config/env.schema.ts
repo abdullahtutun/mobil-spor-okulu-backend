@@ -48,6 +48,35 @@ export const envSchema = z.object({
   AUTH_LOGIN_IP_LIMIT: z.coerce.number().int().min(1).default(30),
   AUTH_LOGIN_FAILURE_LIMIT: z.coerce.number().int().min(1).default(10),
   AUTH_LOGIN_EMAIL_FAILURE_LIMIT: z.coerce.number().int().min(1).default(20),
+  // Kodlu akışlar (S06). Şifre sıfırlama / kayıt kodunun süresi (sn): e-posta
+  // metni "Kod 10 dakika geçerlidir" diyor. Davet bağlantısı: "24 saat".
+  AUTH_OTP_EXPIRY_SEC: z.coerce.number().int().min(60).max(86_400).default(600),
+  AUTH_INVITE_EXPIRY_SEC: z.coerce
+    .number()
+    .int()
+    .min(600)
+    .max(7 * 86_400)
+    .default(86_400),
+  // Bir kod için en çok kaç yanlış deneme; aşılınca kod geçersiz olur.
+  AUTH_OTP_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+  // E-posta gönderen uçlar (recover, signup, resend), hesap var mı bakılmadan:
+  //   aynı adrese en sık AUTH_EMAIL_SEND_INTERVAL_SEC'de bir (Supabase: 60),
+  //   adres başına saatte AUTH_EMAIL_HOURLY_LIMIT, IP başına saatte
+  //   AUTH_EMAIL_IP_HOURLY_LIMIT. Kod doğrulama: IP başına 5 dk'da
+  //   AUTH_VERIFY_IP_LIMIT (Supabase: 30).
+  AUTH_EMAIL_SEND_INTERVAL_SEC: z.coerce.number().int().min(0).default(60),
+  AUTH_EMAIL_HOURLY_LIMIT: z.coerce.number().int().min(1).default(5),
+  AUTH_EMAIL_IP_HOURLY_LIMIT: z.coerce.number().int().min(1).default(30),
+  AUTH_VERIFY_IP_LIMIT: z.coerce.number().int().min(1).default(30),
+  // Marka başına SMTP posta kutusu (yönetim send-email'iyle aynı anahtarlar).
+  // Bir markanın kullanıcı adı ya da parolası boşsa o markanın e-postası
+  // GİTMEZ, hata olur — başka markanın adresinden göndermek yok.
+  SMTP_HOST: z.string().min(1).default('smtp.hostinger.com'),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(465),
+  SMTP_USER_DEV_ADIM: z.string().default(''),
+  SMTP_PASS_DEV_ADIM: z.string().default(''),
+  SMTP_USER_PUBLIC: z.string().default(''),
+  SMTP_PASS_PUBLIC: z.string().default(''),
   // Tarayıcıdan çağırabilecek kökenler, virgülle. Boşsa CORS kapalı
   // (mobil uygulamaların CORS'a ihtiyacı yok).
   CORS_ORIGINS: z
