@@ -17,6 +17,13 @@ repository'ler, DTO'lar, `RpcEnvelope` ve ekranlar aynı kalır.
   `features/*/data/source/`
 
 ## Yapılacaklar
+- **S11'den:** realtime protokolü `docs/api/realtime.md` (`GET /realtime`
+  WebSocket; ilk mesaj `{type:'auth', token}`, sonra
+  `{type:'subscribe', channel:'notifications:<uid>'}`; olay
+  `{type:'event', event, record}`, `resync` = yeniden oku; token yenilenince
+  `auth` tekrar gönderilir; 4001 = token yenile + yeniden bağlan, 4003 =
+  hata). UPDATE olayları zaten yalnızca `isRevived` satırlar. Push token
+  kaydı (`register_push_token`) değişmez; push metinleri sunucuda.
 - **S05'ten:** auth uçları ve hata kodları `docs/api/auth.md`'de
   (`/auth/token?grant_type=password|refresh_token`, `/auth/logout?scope=`,
   `/auth/user`). Refresh token her kullanımda döner — yanıttaki yenisi

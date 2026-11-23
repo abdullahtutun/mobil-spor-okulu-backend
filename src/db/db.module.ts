@@ -12,6 +12,7 @@ import type { AppConfig } from '../config/env.schema';
 import { DbContextService } from './db-context.service';
 import type { Database } from './database';
 import { DB_POOL, KYSELY } from './db.tokens';
+import { PgListener } from './pg-listener.service';
 
 const logger = new Logger('DbModule');
 
@@ -47,8 +48,10 @@ const logger = new Logger('DbModule');
         new Kysely<Database>({ dialect: new PostgresDialect({ pool }) }),
     },
     DbContextService,
+    // S11: havuz dışı LISTEN bağlantısı (push dürtmesi, gelen kutusu olayları).
+    PgListener,
   ],
-  exports: [DB_POOL, KYSELY, DbContextService],
+  exports: [DB_POOL, KYSELY, DbContextService, PgListener],
 })
 export class DbModule implements OnApplicationShutdown {
   constructor(

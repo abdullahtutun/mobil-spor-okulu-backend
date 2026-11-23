@@ -63,14 +63,14 @@ src/
   main.ts, app.module.ts, app.setup.ts (body limit, CORS, trust proxy — shared with e2e)
   config/            env schema (zod), typed ConfigService
   common/            errors, logging, http/ (raw-text-body for the anonymous functions, IpHasher)
-  db/                pg Pool, Kysely, DbContextService (withRole / withUser)
+  db/                pg Pool, Kysely, DbContextService (withRole / withUser), PgListener (S11: one LISTEN connection)
   rpc/               POST /rpc/:name gateway + allow-list (rpc-allowlist.ts), pg_proc signature cache
   auth/              request/ (S04: JwtVerifier, RequestAuthGuard, @ReqAuth); S05: /auth/token, /logout, /user (docs/api/auth.md);
                      S06: flows/ (/auth/recover, /signup, /resend, /verify), admin/ (AuthAdminService, server-only), otp/
   mail/              per-brand SMTP (MailService) + email-content.ts / brand-logos.ts (copies of the management send-email hook)
   storage/           S08: /storage/object/* (storage-api compatible, docs/api/storage.md); disk-store, object-key, mime, multipart
-  realtime/          WebSocket gateway fed by LISTEN/NOTIFY
-  push/              FCM worker (ex send-push)
+  realtime/          S11: GET /realtime WebSocket (docs/api/realtime.md), fed by LISTEN notifications_changed
+  push/              S11: FCM worker (ex send-push): LISTEN push_dispatch → claim/complete_push_batch
   accounts/          S09: POST /functions/{create-user,update-user,create-parent,update-parent,delete-account} (docs/api/functions.md)
   pre-registration/  S10: POST /functions/{submit-pre-registration,convert-pre-registration,bulk-convert-pre-registrations}
   site-lead/         S10: POST /functions/site-lead (own CORS) + validation copied from the management repo
@@ -85,9 +85,10 @@ dumps/               (gitignored) `supabase db dump` output — never committed
 test/                e2e + integration (Testcontainers, real Postgres)
   support/           database.ts (build image, start, dbmate up, seed), docker-env.ts, fake-mail.ts (FakeMailbox),
                      postgrest.ts (a real PostgREST on the test db — S07's read functions are diffed against it)
+                     fake-fcm.ts (FakeFcm: `fcmOf(app)`), ws-client.ts (TestWs, realtime client)
   fixtures/          seed.sql (made-up data: two schools, two brands, every role) + seed-ids.ts
 docs/migration/      plan, progress log, session files
-docs/api/            API contracts the apps are rewritten against (auth.md, storage.md, functions.md)
+docs/api/            API contracts the apps are rewritten against (auth.md, storage.md, functions.md, realtime.md)
 ```
 
 Each feature module follows `controller → service → repository`; a
@@ -332,6 +333,36 @@ npm run db:migrate && npm run test:e2e
   deleted. `src/site-lead/site-lead.validation.ts` is a copy of the
   management repo's `supabase/functions/site-lead/validation.ts` — change
   both together.
+
+## Realtime, push and cron (S11)
+
+- **One LISTEN connection** (`PgListener`, outside the pool, as
+  `api_authenticator`; channels `push_dispatch`, `notifications_changed`).
+  It reconnects with backoff; listeners get `onConnected({reconnected})` —
+  push drains the queue, realtime sends `resync`. NOTIFY payloads never
+  carry personal data and are never trusted for authorization.
+- **Realtime** (`docs/api/realtime.md`): token in the first message, own
+  channel only (`notifications:<sub>`), every event re-read with
+  `get_notification(id)` **as the subscriber** (`withUser`) — RLS decides,
+  no TS-side rule. Session re-checked periodically; expiry closes 4001.
+  UPDATE events only for revived rows (trigger `WHEN`, 0009).
+- **Push** (`PushWorker`): port of `send-push`. `render()` must stay
+  identical to `supabase/functions/send-push/index.ts` and `isDeadToken` to
+  `fcm_error.ts` (unit tests transpile the sibling repo's files and compare).
+  `data.params` is an allow-list per type (`DATA_KEYS`) — deliberately
+  stricter than send-push, which leaked `names` / `athlete_name`. A new
+  notification type = `render` + `DATA_KEYS` here too. FCM only through
+  `FCM_TRANSPORT` (`HttpFcmTransport`, raw HTTP v1; tests `FakeFcm`, never
+  real FCM). No HTTP endpoint and no dispatch secret: the database nudges
+  via NOTIFY.
+- **Several API processes are safe** for both: claims are
+  `for update skip locked` (at-most-once, e2e-tested), and each process
+  serves only its own sockets from its own LISTEN. (The in-memory rate
+  limiters elsewhere still assume one process — S04.)
+- Backend-only DB objects: functions with a `backend:` comment, triggers
+  named `backend_*` — both excluded from the live fingerprint.
+- Cron: the 9 jobs of `0003_cron_jobs.sql` run inside Postgres (pg_cron);
+  `test/notifications.e2e-spec.ts` runs every job's command.
 
 ## Docker on this Mac (colima)
 

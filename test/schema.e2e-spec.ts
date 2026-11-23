@@ -47,11 +47,13 @@ const NOT_YET_LIVE_FINGERPRINT: Partial<Record<string, string>> = {};
 
 /**
  * Yalnızca yeni backend'de olan, canlıya hiç gitmeyecek nesneler: S07'nin
- * okuma fonksiyonları (0007; yorumları `backend:` ile başlar, parmak izi
- * onları dışarıda bırakır).
+ * okuma fonksiyonları (0007) ve S11'in gelen kutusu trigger'ı (0009: bir
+ * fonksiyon, iki trigger). Fonksiyonların yorumu `backend:`, trigger'ların
+ * adı `backend_` ile başlar; parmak izi onları dışarıda bırakır.
  */
 const BACKEND_ONLY: Partial<Record<keyof typeof LIVE, number>> = {
-  functions: 24,
+  functions: 25,
+  triggers: 2,
 };
 
 /** scripts/schema-fingerprint.sql'in canlıdaki sonucu (2026-11-23). */

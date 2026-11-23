@@ -11,6 +11,11 @@ bir bakım penceresiyle geçmek; sonra Supabase'i güvenle kapatmak.
 - S02 teslim notu (zorunlu güncelleme kapısını taşıyan sürümler)
 
 ## Yapılacaklar
+- **S11'den:** geçişte Supabase'teki push dürtmesi (pg_net + Vault →
+  send-push) kapanmalı, yoksa iki taraf aynı token'lara gönderir (veri
+  taşındıktan sonra Supabase'te yazım olmamalı zaten). Yönetim reposundaki
+  send-push'un `data`'sına kişisel veri sızıyor (`names`, `athlete_name`) —
+  backend'de düzeltildi; canlıda da düzeltilmesi önerildi (PROGRESS, S11).
 - [ ] `docs/migration/RUNBOOK-cutover.md`: dakika dakika plan, her adımın
       sahibi, doğrulama komutu ve geri alma noktası. İçermesi gerekenler:
   - **Önce (T-1 hafta):** S02 kapısının yaygınlığı (kaç kullanıcı kapılı

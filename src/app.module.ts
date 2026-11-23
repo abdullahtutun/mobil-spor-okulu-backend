@@ -12,6 +12,8 @@ import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
 import { PreRegistrationModule } from './pre-registration/pre-registration.module';
+import { PushModule } from './push/push.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { RpcModule } from './rpc/rpc.module';
 import { SiteLeadModule } from './site-lead/site-lead.module';
 import { StorageModule } from './storage/storage.module';
@@ -39,6 +41,8 @@ import { StorageModule } from './storage/storage.module';
     AccountsModule,
     PreRegistrationModule,
     SiteLeadModule,
+    RealtimeModule,
+    PushModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

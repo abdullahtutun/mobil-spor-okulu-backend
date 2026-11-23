@@ -10,7 +10,9 @@ import { configureApp } from '../../src/app.setup';
 import { APP_CONFIG } from '../../src/config/config.module';
 import type { AppConfig } from '../../src/config/env.schema';
 import { MAIL_TRANSPORT_FACTORY } from '../../src/mail/mail.service';
+import { FCM_TRANSPORT } from '../../src/push/fcm.transport';
 import type { TestDatabase } from './database';
+import { FakeFcm } from './fake-fcm';
 import { FakeMailbox } from './fake-mail';
 
 /** e2e testlerinde token imzalayan anahtar (yalnızca test). */
@@ -59,7 +61,8 @@ export function setTestEnv(
 
 /**
  * `main.ts` ile aynı kurulumla (gövde sınırı, CORS) bir uygulama açar.
- * E-postalar gerçek SMTP'ye değil `FakeMailbox`'a gider: `mailboxOf(app)`.
+ * E-postalar gerçek SMTP'ye değil `FakeMailbox`'a gider: `mailboxOf(app)`;
+ * push'lar `FakeFcm`'e: `fcmOf(app)`.
  */
 export async function createTestApp(
   db: TestDatabase,
@@ -71,6 +74,9 @@ export async function createTestApp(
   })
     .overrideProvider(MAIL_TRANSPORT_FACTORY)
     .useValue(new FakeMailbox())
+    // Gerçek FCM'e hiçbir test gitmez (S11); varsayılan "yapılandırılmamış".
+    .overrideProvider(FCM_TRANSPORT)
+    .useValue(new FakeFcm())
     .compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({
     bodyParser: false,
@@ -84,4 +90,9 @@ export async function createTestApp(
 /** Uygulamanın sahte posta kutusu. */
 export function mailboxOf(app: INestApplication): FakeMailbox {
   return app.get<FakeMailbox>(MAIL_TRANSPORT_FACTORY);
+}
+
+/** Uygulamanın sahte FCM'i. */
+export function fcmOf(app: INestApplication): FakeFcm {
+  return app.get<FakeFcm>(FCM_TRANSPORT);
 }

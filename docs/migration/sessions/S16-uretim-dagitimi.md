@@ -17,6 +17,12 @@ dosyaları ve adım adım kontrol listesini hazırlar, kullanıcı panelde uygul
 - Coolify'ın git erişimi (GitHub App / deploy key) ve repo'nun nerede durduğu.
 
 ## Yapılacaklar
+- **S11'den:** vekil `/realtime`'da WebSocket'i (Upgrade/Connection
+  başlıkları) geçirmeli, boşta kalma süresi sunucunun 30 sn'lik ping'inden
+  uzun olmalı. Env: `FCM_SERVICE_ACCOUNT` (Supabase secrets'taki
+  servis hesabı JSON'u — kullanıcıdan; boşsa push kapalı, kuyruk bekler),
+  `PUSH_SWEEP_INTERVAL_MS`, `REALTIME_*`. API ile Postgres arasındaki
+  bağlantı uzun ömürlü bir LISTEN bağlantısı da taşır (havuz + 1).
 - [ ] Coolify'da proje + `production` ortamı.
 - [ ] Postgres: Coolify "Database" kaynağı, **özel imaj** (S01'in
       `docker/postgres/Dockerfile`'ı registry'ye ya da Coolify'ın Dockerfile

@@ -11,7 +11,10 @@
 --   request_push_dispatch    db/compat/04: pg_net + Vault yerine pg_notify
 --   yorumu `backend:` ile başlayan fonksiyonlar
 --                            yalnızca yeni backend'de var (S07'nin okuma
---                            fonksiyonları, 0007); canlıda karşılıkları yok
+--                            fonksiyonları, 0007; S11'in gelen kutusu
+--                            trigger fonksiyonu, 0009); canlıda yoklar
+--   adı `backend_` ile başlayan trigger'lar
+--                            yalnızca yeni backend'de (S11, 0009)
 --
 -- Henüz canlıya uygulanmamış bir migration taşındıysa (AGENTS.md → "Schema
 -- sync") onun nesneleri geçici olarak aşağıdaki `not in (...)` listelerine
@@ -38,6 +41,7 @@ select 'trg', md5(string_agg(pg_get_triggerdef(t.oid), '|' order by c.relname, t
   join pg_class c on c.oid = t.tgrelid
  where c.relnamespace = 'public'::regnamespace and not t.tgisinternal
    and c.relname not in ('schema_migrations')
+   and t.tgname not like 'backend\_%'
 union all
 select 'tblacl', md5(string_agg(
          c.relname || coalesce(array_to_string(c.relacl, ','), '') || c.relrowsecurity::text || c.relforcerowsecurity::text,

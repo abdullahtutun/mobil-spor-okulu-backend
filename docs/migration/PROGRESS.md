@@ -18,7 +18,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S08 | tamam | 2026-11-23 | storage-api uyumlu `/storage/object/*` (yükleme/upsert, oturumlu ve public okuma, toplu silme), satırlar isteğin rolüyle (8 canlı politika aynen), disk `STORAGE_ROOT`, ad/tür/boyut/sembolik bağ korumaları |
 | S09 | tamam | 2026-11-23 | `POST /functions/{create-user,update-user,create-parent,update-parent,delete-account}`, Edge gövdeleri/kodları bire bir, denetim sırası aynı; 61 e2e (hiyerarşi, yetki, şube, kendi hesap, rol 8, e-posta değişikliği, son genel müdür, hız sınırı) |
 | S10 | tamam | 2026-11-23 | `POST /functions/{submit-pre-registration,convert-pre-registration,bulk-convert-pre-registrations,site-lead}`, Edge gövdeleri/kodları ve denetim sırası aynı; IP özeti + trust proxy; 50 e2e (sınırlar, token, kapsam, kardeş veli, ILIKE, geri alma, CORS) |
-| S11 | bekliyor | | |
+| S11 | tamam | 2026-11-23 | `GET /realtime` (WS, ilk mesajla token, kendi kanalı, her olay abone adına RLS'le), 0009 notifications trigger'ı → pg_notify, PgListener, send-push portu (sahte FCM ile), 9 cron komutu testli; 59 e2e |
 | S12 | bekliyor | | |
 | S13 | bekliyor | | |
 | S14 | bekliyor | | |
@@ -38,6 +38,11 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
 - S02: 1.1.2+10 mağazaya ne zaman çıkacak? (kullanıcıda)
 - S02: iOS App Store adresleri (`app_min_versions.store_url`) S17'den önce
   yazılmalı.
+- S11: canlı `send-push` birthdays_today/upcoming'de sporcu adlarını
+  (`names`), pre_registration_received'da çocuğun adını (`athlete_name`)
+  FCM `data`'sına koyuyor. Backend'de izin listesiyle düzeltildi; yönetim
+  reposundaki Edge Function'da da düzeltilip dağıtılsın mı? (kullanıcı)
+- S16: `FCM_SERVICE_ACCOUNT` (Supabase secrets'taki değer) kullanıcıdan.
 
 VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
@@ -45,6 +50,60 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S11 — Bildirimler: realtime, push, cron (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/api/realtime.md`'ye
+  bakın. Orkestratörle, kullanıcıya sorulmadan çalıştırıldı; plan kararı
+  (K1–K16) değişmedi. Canlıya hiçbir sorgu atılmadı (gerek olmadı; şema
+  0001'de, kaynak davranış yönetim reposunda).
+- Kendi verdiğim kararlar:
+  - **Kendi küçük JSON protokolü** (Phoenix taklidi değil): tek kullanım
+    gelen kutusu, istemci S13/S15'te zaten yeniden yazılıyor. Token ilk
+    mesajda (tarayıcıda WS başlığı yok, adres vekil loglarına düşer);
+    kanal adı Supabase'tekiyle aynı (`notifications:<uid>`).
+  - **Yetki teslim anında, abone adına RLS'le** (`get_notification`,
+    `withUser`); NOTIFY yükündeki alıcı yalnızca yönlendirme. Pasif/silinmiş
+    hesap ve uydurma NOTIFY böylece kod kuralı yazmadan kapanıyor. Oturum
+    (çıkış/silme) `REALTIME_SESSION_CHECK_MS`'de bir yeniden denetlenir;
+    süresi dolan token 4001.
+  - **UPDATE olayı yalnızca yeniden canlanan satır** (trigger `WHEN`):
+    Supabase her UPDATE'i yolluyordu, veli `isRevived` dışındakileri
+    atıyordu, yönetim hiç dinlemiyordu; push worker'ın her gönderimdeki iki
+    yazımı olay fırtınası olmasın. İstemcinin gördüğü sonuç aynı.
+  - **Satır trigger'ı** (statement değil): duyuru N satır = N küçük NOTIFY;
+    yükü 8000 bayt sınırına sokmamak için. Alıcı bağlı değilse sorgu yok.
+  - **firebase-admin yerine ham FCM HTTP v1** (oturum dosyası firebase-admin
+    diyordu; K1'in gerekçesindeki bir örnek, karar değil): `isDeadToken`
+    FCM'in ham hata gövdesine (`fieldViolations`) bakıyor, firebase-admin
+    gövdeyi kendi koduna çevirip bu bilgiyi kaybediyor — ölü token kararı
+    send-push'unkinden farklılaşırdı. JWT RS256 `node:crypto` ile.
+  - **`data.params` izin listesi** (send-push'tan bilinçli fark): canlıdaki
+    sürüm personel türlerinde bütün `params`'ı yolluyor; `names` (ilk beş
+    sporcu adı) ve `athlete_name` FCM `data`'sına giriyor. Yalnızca
+    uygulamanın yönlendirmede okuduğu alanlar kaldı. Açık sorulara yazıldı.
+  - **Ağ hatası yeniden deneme**, beş tur dolarsa hemen yeni boşaltma; API
+    içi süpürme `PUSH_SWEEP_INTERVAL_MS` (DB cron'una ek, LISTEN koptuğunda
+    kaçanlar için); her LISTEN açılışında kuyruğa bakılır.
+  - **FCM sırrı bozuksa API açılır**, push kapalı kalır ve hata loglanır
+    (Edge her çağrıda 500 dönüyordu; tek sır yüzünden bütün API durmasın).
+  - **Kapanış kodları** 4000/4001/4003/4029; bağlantı sınırında en eski
+    kapanır (heartbeat'in düşürmediği ölü soketler yenisini engellemesin).
+  - **Çoklu süreç güvenli** (AGENTS.md): talep `skip locked`, her süreç
+    kendi soketlerine; ortak durum yok.
+  - `ws` 8.22.2 (8.23.0 iki haftadan yeni).
+- Kabul: lint, typecheck, `npm test` (178), `npm run test:e2e` (683, üç tam
+  koşu). İlk tam koşuda düşen tek test S07'nin katalog testiydi (bütün
+  `backend:` fonksiyonlarını okuma fonksiyonu sayıyordu; `backend: S07`
+  ile daraltıldı) — zamanlamaya bağlı değil. S10'un tanımlanamayan düşen
+  testi bu oturumdaki koşularda tekrarlanmadı.
+- Sonraki oturumlar için:
+  - S13/S15: protokol `docs/api/realtime.md`; notlar oturum dosyalarında.
+  - S16: vekilde WebSocket, `FCM_SERVICE_ACCOUNT`, havuz + 1 LISTEN
+    bağlantısı.
+  - S17: Supabase'teki push dürtmesi geçişte kapanmalı (iki taraf aynı
+    token'lara göndermesin).
+  - Yönetim reposuna yeni bildirim türü eklenirse: `render()` (birim test
+    kaynağı karşılaştırır) ve `DATA_KEYS` burada da.
 
 ### S10 — Online ön kayıt ve site lead (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/api/functions.md`'ye

@@ -680,7 +680,7 @@ describe('Okuma fonksiyonları = PostgREST (S07, gerçek Postgres + PostgREST)',
                 obj_description(oid, 'pg_proc') as comment
            from pg_proc
           where pronamespace = 'public'::regnamespace
-            and (proname = any($1) or obj_description(oid, 'pg_proc') like 'backend:%')`,
+            and (proname = any($1) or obj_description(oid, 'pg_proc') like 'backend: S07%')`,
         [[...READS, 'get_notification']],
       );
       expect(rows.map((r) => r.proname).sort()).toEqual(

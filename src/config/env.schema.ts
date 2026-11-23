@@ -139,6 +139,33 @@ export const envSchema = z.object({
     .min(1024)
     .max(50 * 1024 * 1024)
     .default(5 * 1024 * 1024),
+  // S11 push (ex send-push): Firebase servis hesabı JSON'u, tek satır. Boşsa
+  // push kapalı — kuyruk bekler, gelen kutusu çalışır (Edge Function gibi).
+  // Geçersiz JSON da kapalı sayılır ve açılışta hata loglanır; API'yi
+  // durdurmaz.
+  FCM_SERVICE_ACCOUNT: z.string().default(''),
+  // Kuyruğun API içinden periyodik süpürülmesi (ms; 0 = kapalı). Asıl dürtme
+  // veritabanından gelir (trigger + 5 dakikalık sweep_push_queue cron'u);
+  // bu, LISTEN bağlantısının koptuğu anlarda kaçanlar için.
+  PUSH_SWEEP_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(5 * 60_000),
+  // S11 realtime (`GET /realtime`, WebSocket): bağlandıktan sonra auth
+  // mesajının en geç gelmesi gereken süre, sunucunun ping aralığı (pong
+  // gelmezse bağlantı düşürülür), oturumun (çıkış / hesap silme) yeniden
+  // denetlenme aralığı ve bir kullanıcının aynı anda açık bağlantı sayısı
+  // (aşılınca en eskisi kapanır).
+  REALTIME_AUTH_TIMEOUT_MS: z.coerce.number().int().min(100).default(5_000),
+  REALTIME_HEARTBEAT_MS: z.coerce.number().int().min(100).default(30_000),
+  REALTIME_SESSION_CHECK_MS: z.coerce.number().int().min(100).default(60_000),
+  REALTIME_MAX_SOCKETS_PER_USER: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(10),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),

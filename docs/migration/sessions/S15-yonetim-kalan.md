@@ -16,6 +16,11 @@ hazırlamak.
 - Site `AGENTS.md`/README, `src/config/site.ts`, `src/infrastructure/lead/`
 
 ## Yapılacaklar
+- **S11'den:** gelen kutusu realtime'ı `docs/api/realtime.md` (yönetim
+  yalnızca INSERT'e bakar; `UPDATE` olayları yok sayılabilir). Push'un
+  `data.params`'ı artık tür başına izin listesi (`class_id`, `date`,
+  `count`, `days`, kimlikler) — `NotificationDestination`'ın okuduklarıyla
+  aynı; `athlete_name` / `names` gelmez.
 - [ ] `.from()` okumaları → `read-mapping.md`'deki fonksiyonlar
       (`paged_query.dart` yeni sayfalama şekline).
 - [ ] Storage: sporcu fotoğrafı yükleme/okuma, okul logosu (public URL
