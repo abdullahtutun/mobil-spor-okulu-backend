@@ -36,7 +36,7 @@ Gerekçeleriyle birlikte. Bir oturum bunlardan birini değiştirirse burayı ve
 | K1 | NestJS 11 + TypeScript, Node 24, npm | Edge Function'lar zaten TS; resmi `firebase-admin`; katmanlı DI yapısı uygulamalara benzer |
 | K2 | Kysely (query builder) + `pg`; ORM yok | Şema SQL öncelikli; ORM şemayı yönetmeye kalkar |
 | K3 | Migration: dbmate, düz SQL | Mevcut migration'lar düz SQL; araç bağımsız |
-| K4 | Postgres major sürümü Supabase projesiyle aynı; imaj `postgres:<major>` + `pg_cron` | Dump'ın sorunsuz yüklenmesi |
+| K4 | Postgres major sürümü Supabase projesiyle aynı: **17** (canlı: 17.6, 2026-11-23); imaj `postgres:17-bookworm` + `pg_cron` (`docker/postgres/Dockerfile`). Supabase'te kurulu eklentilerden pgcrypto, uuid-ossp contrib olarak imajda var; pg_net ve supabase_vault bilerek yok (K10) | Dump'ın sorunsuz yüklenmesi |
 | K5 | RLS korunur: istek başına `set local role` + `request.jwt.claims` | 127 `auth.uid()` ve tüm politikalar değişmeden çalışır |
 | K6 | `POST /rpc/:name` + allow-list, PostgREST ile aynı parametre adları ve JSON | Uygulamalarda DTO/mapper değişmez |
 | K7 | `.from()` okumaları `SECURITY INVOKER` SQL fonksiyonlarına çevrilir | PostgREST klonu yazmamak; tek kapı RPC |

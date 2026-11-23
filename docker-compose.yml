@@ -1,0 +1,42 @@
+# Yerel geliştirme. Üretimde Coolify kullanılır (PLAN.md K15, S16).
+#
+#   docker compose up -d db              yalnızca Postgres (npm run start:dev ile)
+#   docker compose --profile api up -d   Postgres + API imajı
+name: mobil-spor-okulu
+
+services:
+  db:
+    build: ./docker/postgres
+    image: mobil-spor-okulu-postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    ports:
+      # Yalnızca bu makineden erişilir.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    profiles: [api]
+    build: .
+    image: mobil-spor-okulu-api:local
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres?sslmode=disable
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:

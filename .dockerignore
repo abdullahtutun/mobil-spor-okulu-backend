@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+.git
+.claude
+docs
+test
+dumps
+exports
+storage-data
+*.md

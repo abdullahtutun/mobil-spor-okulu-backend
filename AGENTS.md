@@ -77,9 +77,11 @@ src/
 db/
   migrations/        dbmate SQL migrations (0001_baseline.sql = Supabase dump + compat)
   compat/            sources of the compatibility layer, kept readable
-docker/              Postgres image (pg_cron), Caddyfile, compose files
+docker/postgres/     Postgres 17 image (pg_cron preloaded, cron.database_name=postgres)
+docker-compose.yml   local db (+ optional api profile); Dockerfile = API image
 scripts/             data export/import, backup
 test/                e2e + integration (Testcontainers, real Postgres)
+  support/           database.ts (build image, start, dbmate up), docker-env.ts
 docs/migration/      plan, progress log, session files
 ```
 
@@ -110,10 +112,46 @@ needed in tests (`I*` naming, same as the apps).
 ## Commands
 
 ```bash
-npm run start:dev          # API (needs docker compose up -d db)
-docker compose up -d db    # Postgres with pg_cron
-npm run db:migrate         # dbmate up
-npm test                   # unit
-npm run test:e2e           # integration (Testcontainers)
-npm run lint
+cp .env.example .env                    # once; every key is checked in src/config/env.schema.ts
+docker compose up -d db                 # Postgres 17 + pg_cron on 127.0.0.1:5432
+npm run db:migrate                      # dbmate up (db/migrations/, reads DATABASE_URL from .env)
+npm run db:rollback                     # dbmate rollback (last migration)
+npm run db:new -- <name>                # new dbmate migration file
+npm run start:dev                       # API on :3000 — GET /health, GET /health/live
+npm test                                # unit (src/**/*.spec.ts)
+npm run test:e2e                        # integration (test/**/*.e2e-spec.ts, Testcontainers)
+npm run lint                            # eslint + prettier (check only; lint:fix fixes)
+docker compose --profile api up -d --build   # API image too (what Coolify builds)
 ```
+
+- **dbmate** is the npm package (`node_modules/.bin/dbmate`), not a Docker
+  image; scripts pass `--no-dump-schema` (no local `pg_dump` needed).
+  `0000_init.sql` is a no-op: dbmate's `up` fails on an empty folder. The
+  baseline comes in S03 as `0001_baseline.sql`; `db:new` names files with a
+  timestamp, which sorts after it.
+- The database is `postgres` (as on Supabase), because `pg_cron` runs in
+  exactly one database (`cron.database_name`).
+- **Kysely is pinned to 0.28.x**: 0.29 is ESM-only and Jest (CommonJS,
+  ts-jest) cannot load it. The app itself would run with 0.29.
+
+### Docker on this Mac (colima)
+
+Docker runs in **colima** (`colima start --cpu 2 --memory 4`); Docker
+Desktop was removed. Two leftovers break things:
+
+- `~/.docker/cli-plugins/docker-compose` and `docker-buildx` are dangling
+  links into the removed Docker.app → `docker compose` answers
+  "unknown shorthand flag: 'd'". Fix: `brew install docker-compose
+  docker-buildx` and add `"cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]`
+  to `~/.docker/config.json` (and delete the dangling links).
+- `~/.docker/config.json` still says `"credsStore": "desktop"` and
+  `docker-credential-desktop` no longer exists → pulls fail. Fix: remove the
+  `credsStore` line. Until then use a clean config:
+  `export DOCKER_CONFIG=<dir with {} config.json and the cli-plugins>`.
+
+Testcontainers needs none of that by hand: `test/support/docker-env.ts`
+(jest-e2e `setupFiles`) sets `DOCKER_HOST=unix://~/.colima/default/docker.sock`
+when unset, `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` (Ryuk
+mounts the socket path *inside* the VM), and points `DOCKER_CONFIG` at an
+empty config when the `credsStore` helper is missing. Ryuk stays enabled.
+The first e2e run builds the Postgres image (~1 min); later runs take ~3 s.
