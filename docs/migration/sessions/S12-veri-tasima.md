@@ -35,6 +35,16 @@ ve yerelde provası. S17 bu araçları geçiş gecesi çalıştırır.
   - Şema dump'ı CLI ile parolasız alınabiliyor:
     `supabase db dump --project-ref <ref> [--data-only] -f dumps/…`
     (geçici giriş rolü, IPv4 pooler; colima'da `DOCKER_HOST` gerekli).
+- **S08:** dosyalar `STORAGE_ROOT/<bucket>/<name>` yoluna (klasör 0700,
+    dosya 0600, sahibi API kullanıcısı); `storage.objects` satırları aynen
+    (`path_tokens` hariç). Her ad `src/storage/object-key.ts` →
+    `isValidObjectKey`'den geçmeli (geçmeyen raporlanır); md5 = metadata
+    `eTag`. Logo adresi: `schools.logo_url`'de
+    `https://gcmeltwnryjscinptecb.supabase.co/storage/v1/` öneki
+    `<API>/storage/` olur (SQL `docs/api/storage.md` → "Logo adresleri").
+    Canlı 2026-11-23: athlete-photos 12 nesne / ~285 KB, school-logos 3 / ~580 KB.
+    Dosyalar `.tmp`/`.trash`'e değil doğrudan yerine; API kapalıyken
+    kopyalanır.
 - [ ] `scripts/export/`: public şema verisi (`supabase db dump --linked
       --data-only`), `auth.users` (yalnızca S03'teki sütunlar; salt okunur
       sorgu), `storage.objects` satırları ve iki bucket'ın bütün dosyaları

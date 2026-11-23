@@ -24,7 +24,9 @@ dosyaları ve adım adım kontrol listesini hazırlar, kullanıcı panelde uygul
       göre.
 - [ ] API: Coolify "Application", repo'daki `Dockerfile` ile build;
       ortam değişkenleri Coolify'da (sırlar repoda değil); storage için
-      kalıcı volume (`STORAGE_ROOT`); healthcheck `/health`; deploy öncesi
+      kalıcı volume (`STORAGE_ROOT`, imajda `/data/storage`, sahibi `node`
+      uid 1000; S08) — tek dosya sistemi (`rename` atomik), vekilin gövde
+      sınırı ≥ 2 MB + multipart payı; healthcheck `/health`; deploy öncesi
       `db:migrate` (pre-deploy komutu ya da açılışta, hangisi seçildiyse
       gerekçeli).
 - [ ] Alan adı + TLS Coolify proxy'sinden; WebSocket (`/realtime`),

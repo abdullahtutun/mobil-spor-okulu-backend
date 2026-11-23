@@ -35,6 +35,10 @@ services:
       # .env'deki adres 127.0.0.1'e bakar; konteynerden db servisine. Parola
       # `npm run db:api-password` ile verilenle aynı olmalı.
       API_DATABASE_URL: ${API_DATABASE_URL_DOCKER:-postgres://api_authenticator:api-yerel-parola@db:5432/postgres?sslmode=disable}
+      STORAGE_ROOT: /data/storage
+    volumes:
+      # Fotoğraf ve logo baytları (S08) — kişisel veri, kalıcı volume.
+      - storage-data:/data/storage
     ports:
       - "127.0.0.1:${PORT:-3000}:3000"
     depends_on:
@@ -43,3 +47,4 @@ services:
 
 volumes:
   db-data:
+  storage-data:

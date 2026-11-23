@@ -36,7 +36,10 @@ repository'ler, DTO'lar, `RpcEnvelope` ve ekranlar aynı kalır.
 - [ ] Data source'lar: giriş, çıkış (push token önce), şifre sıfırlama,
       oturum, 9 RPC, gelen kutusu okuması (S07 fonksiyonu), realtime (S11
       protokolü, yeniden bağlanınca ve öne gelince yeniden okuma), fotoğraf
-      indirme/silme (S08), hesap silme (S09).
+      indirme/silme (S08: `GET /storage/object/athlete-photos/<yol>`,
+      `DELETE /storage/object/athlete-photos {prefixes}`; `storage_client`
+      `<API>/storage` köküyle kullanılabilir — `docs/api/storage.md`),
+      hesap silme (S09).
 - [ ] `supabase_flutter` bağımlılığı ve `AuthFlowType` notları kalkar;
       `AGENTS.md`'de Supabase'ten söz eden bölümler yeni backend'e göre
       güncellenir.

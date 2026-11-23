@@ -19,7 +19,7 @@ export function configureApp(
   if (config.CORS_ORIGINS.length > 0) {
     app.enableCors({
       origin: config.CORS_ORIGINS,
-      methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       // supabase-dart'ın gönderdikleri de (apikey, x-client-info) geçsin.
       allowedHeaders: [
         'Authorization',
@@ -27,6 +27,11 @@ export function configureApp(
         'apikey',
         'x-client-info',
         'Prefer',
+        // storage_client (S08): yükleme ve koşullu indirme başlıkları.
+        'x-upsert',
+        'x-metadata',
+        'cache-control',
+        'If-None-Match',
       ],
       credentials: false,
       maxAge: 600,

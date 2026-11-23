@@ -12,8 +12,12 @@ RUN npm run build && npm prune --omit=dev
 # --- runtime ---
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production \
-    PORT=3000
+    PORT=3000 \
+    STORAGE_ROOT=/data/storage
 WORKDIR /app
+# Dosya deposu (S08): Coolify'da kalıcı volume buraya bağlanır; boş volume
+# bu klasörün sahipliğini (node) devralır.
+RUN mkdir -p /data/storage && chown node:node /data/storage
 COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist

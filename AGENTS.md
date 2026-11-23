@@ -68,7 +68,7 @@ src/
   auth/              request/ (S04: JwtVerifier, RequestAuthGuard, @ReqAuth); S05: /auth/token, /logout, /user (docs/api/auth.md);
                      S06: flows/ (/auth/recover, /signup, /resend, /verify), admin/ (AuthAdminService, server-only), otp/
   mail/              per-brand SMTP (MailService) + email-content.ts / brand-logos.ts (copies of the management send-email hook)
-  storage/           buckets on disk + storage.objects
+  storage/           S08: /storage/object/* (storage-api compatible, docs/api/storage.md); disk-store, object-key, mime, multipart
   realtime/          WebSocket gateway fed by LISTEN/NOTIFY
   push/              FCM worker (ex send-push)
   accounts/          ex create-user, update-user, create-parent, update-parent, delete-account
@@ -87,7 +87,7 @@ test/                e2e + integration (Testcontainers, real Postgres)
                      postgrest.ts (a real PostgREST on the test db — S07's read functions are diffed against it)
   fixtures/          seed.sql (made-up data: two schools, two brands, every role) + seed-ids.ts
 docs/migration/      plan, progress log, session files
-docs/api/            API contracts the apps are rewritten against (auth.md)
+docs/api/            API contracts the apps are rewritten against (auth.md, storage.md)
 ```
 
 Each feature module follows `controller → service → repository`; a
@@ -259,6 +259,27 @@ npm run db:migrate && npm run test:e2e
   management repo's `supabase/functions/send-email/`; change both together.
 - Tests never use SMTP: `createTestApp` overrides `MAIL_TRANSPORT_FACTORY`
   with `FakeMailbox` (`mailboxOf(app)`; `codeOf`, `inviteLinkOf`).
+
+## Storage (S08)
+
+- Contract: `docs/api/storage.md`. Same paths and bodies as Supabase
+  storage-api under `<API>/storage` (so `storage_client` keeps working with a
+  new base URL); errors `{statusCode, code, error, message}` with HTTP 400,
+  token errors 401 `PGRST30x`.
+- **The policies decide**: every `storage.objects` read/insert/upsert/delete
+  runs under the caller's role with the same SQL storage-api uses for its
+  permission check; only bucket config and the startup sweep use
+  service_role. Do not add a TS-side permission rule — change a policy in a
+  migration instead. No UPDATE policy on athlete-photos = no overwrite.
+- Bytes in `STORAGE_ROOT/<bucket>/<name>` (0700/0600). Never build a disk
+  path without `DiskStore.pathFor` (`object-key.ts` rule: no `..`, `.`,
+  empty or dot-leading segments); no symlink is followed under the root.
+  Upload = temp file → row INSERT + `rename` in one transaction; delete =
+  row DELETE + move to `.trash` → commit → purge.
+- Content type is checked against the bucket list **and** the body's
+  signature; a new image type for a bucket needs its signature in `mime.ts`.
+- e2e: each app gets its own temp `STORAGE_ROOT` (`test/support/app.ts`);
+  `app.get(StorageService).store.root` is the folder.
 
 ## Docker on this Mac (colima)
 

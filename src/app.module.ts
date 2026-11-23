@@ -11,6 +11,7 @@ import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
 import { RpcModule } from './rpc/rpc.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { RpcModule } from './rpc/rpc.module';
     AuthModule,
     HealthModule,
     RpcModule,
+    StorageModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

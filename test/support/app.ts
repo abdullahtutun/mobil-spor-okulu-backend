@@ -1,5 +1,8 @@
 import type { INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Test } from '@nestjs/testing';
 import type { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
@@ -48,6 +51,8 @@ export function setTestEnv(
     SMTP_PASS_DEV_ADIM: 'test-parola',
     SMTP_USER_PUBLIC: 'noreply@mobilsporokulu.test',
     SMTP_PASS_PUBLIC: 'test-parola',
+    // Her uygulama kendi geçici dosya deposunda (repodaki storage-data değil).
+    STORAGE_ROOT: mkdtempSync(join(tmpdir(), 'mso-e2e-storage-')),
     ...extra,
   });
 }

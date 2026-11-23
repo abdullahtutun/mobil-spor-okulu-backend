@@ -100,6 +100,18 @@ export const envSchema = z.object({
   THROTTLE_TTL_MS: z.coerce.number().int().min(1000).default(60_000),
   // Önde kaç vekil (proxy) var: Coolify'da 1. 0 = istemci IP'si doğrudan soket.
   TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
+  // Dosya deposu (S08, K9): baytlar STORAGE_ROOT/<bucket>/<ad>. Docker'da
+  // kalıcı bir volume olmalı (Coolify: /data/storage). Kişisel veri (çocuk
+  // fotoğrafları) — repoya girmez (.gitignore: /storage-data/).
+  STORAGE_ROOT: z.string().min(1).default('./storage-data'),
+  // Bir dosyanın genel üst sınırı (bayt); bucket'ın file_size_limit'i daha
+  // küçükse o geçerli (athlete-photos 1 MB, school-logos 2 MB).
+  STORAGE_MAX_FILE_SIZE: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .max(50 * 1024 * 1024)
+    .default(5 * 1024 * 1024),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),

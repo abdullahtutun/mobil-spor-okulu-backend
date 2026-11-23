@@ -15,7 +15,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S05 | tamam | 2026-11-23 | Parola girişi, JWT (GoTrue claim'leri), hash'li dönen refresh token + çalınma tespiti, logout kapsamları, /auth/user, kaba kuvvet sınırları, `auth_service` rolü |
 | S06 | tamam | 2026-11-23 | Kodla sıfırlama, açık kayıt + kod + resend, davet bağlantısı, `AuthAdminService`, marka başına SMTP (hook içeriği birebir), hash'li kodlar + deneme sayacı, taramasız yanıtlar, gönderim/doğrulama sınırları |
 | S07 | tamam | 2026-11-23 | 26 `.from()` okuması → 23 SECURITY INVOKER fonksiyon (+ S11'e `get_notification`), allow-list `READS`; gerçek PostgREST'le 10 kullanıcıda JSON fark testi |
-| S08 | bekliyor | | |
+| S08 | tamam | 2026-11-23 | storage-api uyumlu `/storage/object/*` (yükleme/upsert, oturumlu ve public okuma, toplu silme), satırlar isteğin rolüyle (8 canlı politika aynen), disk `STORAGE_ROOT`, ad/tür/boyut/sembolik bağ korumaları |
 | S09 | bekliyor | | |
 | S10 | bekliyor | | |
 | S11 | bekliyor | | |
@@ -45,6 +45,47 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S08 — Dosya depolama (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/api/storage.md`'ye
+  bakın. Orkestratörle, kullanıcıya sorulmadan çalıştırıldı; plan kararı
+  (K1–K16) değişmedi, migration yok. Canlıya yalnızca salt okunur
+  katalog/toplu sorgular: 8 storage politikası (0002 ile aynı), iki bucket
+  (athlete-photos private 1 MB jpeg, school-logos public 2 MB png), 12 + 3
+  nesne, metadata'nın 7 anahtarı ve biçimleri, `user_metadata = {}`,
+  `version` uuid, logo adresinin kalıbı (2 okul). Fotoğraf indirilmedi.
+- Kendi verdiğim kararlar:
+  - **storage-api'nin yolları ve gövdeleri**, kök `<API>/storage`:
+    `storage_client` (2.8.1) S13–S15'te yalnızca kökü değiştirerek
+    kullanılabilir. Hata gövdesi `{statusCode, code, error, message}`, HTTP
+    400 (storage-api'nin `userStatusCode`'u — gerçek sınıf gövdede);
+    token hataları 401 + `PGRST30x` (uygulama token yeniler). Kaynağı
+    storage-api'nin GitHub kodu (web'den okundu).
+  - **Yetki = aynı SQL, isteğin rolüyle**: storage-api önce isteğin rolüyle
+    deneme yapıp sonra süper kullanıcıyla yazıyor; biz doğrudan isteğin
+    rolüyle yazıyoruz (aynı INSERT / ON CONFLICT DO UPDATE … RETURNING /
+    DELETE … RETURNING), sonuç aynı. Public bucket okuması da `anon` rolüyle
+    (storage-api süper kullanıcı) — politika `to public` olduğu için aynı
+    sonuç, ama karar yine politikada.
+  - **Dosya commit'ten önce yerine** (oturum dosyası "commit sonrası"
+    diyordu) ve silmede çöpe-taşı-sonra-sil: gerekçe teslim notunda.
+  - **Supabase'ten sıkı**: `..`/`.`/boş parça/gizli dosya adı, gövde imzası
+    (JPEG/PNG), sembolik bağ izlenmez, geçersiz token public uç dışında 401.
+  - Multipart için kendi ayrıştırıcımız: busboy Dart'ın `filename=""`
+    parçasını metin alanı sayıp baytları bozuyor.
+  - Sınırı aşan gövdenin kalanı okunup atılıyor (en çok 16 MB): bağlantı
+    kapanınca istemci 413 yerine ağ hatası görüyordu (testte EPIPE).
+  - İmzalı URL yok (uygulamalar kullanmıyor; yeni bir saldırı yüzeyi
+    açmamak için yazılmadı).
+- Sonraki oturumlar için:
+  - S12: dosya ve satır taşıma biçimi, ad denetimi ve logo adresi SQL'i
+    S12 dosyasına ve `docs/api/storage.md`'ye yazıldı.
+  - S13/S15: istemci `storage_client` + `<API>/storage`; yönetimdeki
+    `SessionRetryClient` storage reddini `/storage/v1/` yolundan tanıyor —
+    yeni yol `/storage/`. CORS kökenleri `CORS_ORIGINS`'te (web'de logo).
+  - S16: `STORAGE_ROOT` kalıcı volume (`/data/storage`, uid 1000), ayrı
+    yedek; vekilin gövde sınırı ≥ 2 MB + pay. Açılışta 10 dk'dan eski
+    `.tmp`/`.trash` temizlenir.
 
 ### S07 — Tablo okumaları SQL fonksiyonlarına (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna ve

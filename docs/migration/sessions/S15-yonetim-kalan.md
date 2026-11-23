@@ -19,7 +19,13 @@ hazırlamak.
 - [ ] `.from()` okumaları → `read-mapping.md`'deki fonksiyonlar
       (`paged_query.dart` yeni sayfalama şekline).
 - [ ] Storage: sporcu fotoğrafı yükleme/okuma, okul logosu (public URL
-      biçimi S08'deki gibi).
+      biçimi S08'deki gibi). S08: storage-api'yle aynı yollar, kök
+      `<API>/storage` — `storage_client` paketi kalabilir
+      (`StorageClient('<API>/storage', …)`); `getPublicUrl` yeni kökle doğru
+      adresi üretir. Hata gövdesi aynı (`StorageException`); token hatası
+      401 `PGRST303` (SessionRetryClient'ın yol kontrolü `/storage/v1/` →
+      `/storage/` olmalı). Web'de logo `Image.network` ile çekiliyorsa
+      kökenin `CORS_ORIGINS`'te olması gerek.
 - [ ] `functions.invoke` çağrıları → `/functions/<ad>` (S09, S10).
 - [ ] Realtime: gelen kutusu S11 protokolüyle.
 - [ ] Web: üç bundle (`main`, `online-kayit`, `sifre-olusturma`) yeni API
