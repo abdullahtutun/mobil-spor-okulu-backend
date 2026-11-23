@@ -17,6 +17,11 @@ repository'ler, DTO'lar, `RpcEnvelope` ve ekranlar aynı kalır.
   `features/*/data/source/`
 
 ## Yapılacaklar
+- **S05'ten:** auth uçları ve hata kodları `docs/api/auth.md`'de
+  (`/auth/token?grant_type=password|refresh_token`, `/auth/logout?scope=`,
+  `/auth/user`). Refresh token her kullanımda döner — yanıttaki yenisi
+  saklanmalı; 400/403 = oturum bitti (çıkış), ağ hatası = geçici. RPC'de
+  401 `PGRST303`/`PGRST301` → bir kez yenile, tekrar gönder.
 - [ ] `migrate/own-backend` dalı (yoksa aç).
 - [ ] API adresi flavor/ortam yapılandırmasından (`config/*.json` ya da
       `--dart-define`), yerel geliştirme için `http://localhost:<port>`.

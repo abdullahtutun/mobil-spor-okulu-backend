@@ -1,3 +1,4 @@
+import { loadConfig } from '../../config/env.schema';
 import { Writable } from 'node:stream';
 import pino from 'pino';
 import {
@@ -62,18 +63,11 @@ describe('log redaksiyonu', () => {
   });
 
   it('pino-pretty yalnızca geliştirmede açılır', () => {
-    const base = {
-      PORT: 3000,
+    const base = loadConfig({
       DATABASE_URL: 'postgres://x',
       API_DATABASE_URL: 'postgres://y',
       JWT_SECRET: 'x'.repeat(32),
-      CORS_ORIGINS: [],
-      BODY_LIMIT: '1mb',
-      THROTTLE_LIMIT: 600,
-      THROTTLE_TTL_MS: 60_000,
-      TRUST_PROXY: 0,
-      LOG_LEVEL: 'info' as const,
-    };
+    });
     const dev = buildLoggerParams({ ...base, NODE_ENV: 'development' });
     const prod = buildLoggerParams({ ...base, NODE_ENV: 'production' });
     expect(dev.pinoHttp).toHaveProperty('transport.target', 'pino-pretty');

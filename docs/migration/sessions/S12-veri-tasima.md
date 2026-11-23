@@ -28,6 +28,10 @@ ve yerelde provası. S17 bu araçları geçiş gecesi çalıştırır.
     `storage.objects`/`buckets` canlıdaki sütunların alt kümesi (sürümleme,
     yaşam döngüsü sütunları yok, `03_storage.sql`).
   - `auth.audit_log_entries` tablosu yok (5651 saklaması için ayrıca karar).
+  - **S05:** refresh token'lar bizde SHA-256 hex (`token`, `parent`);
+    Supabase'te 12 karakter düz metin. Oturumlar taşınacaksa ikisi de
+    `encode(sha256(convert_to(token, 'UTF8')), 'hex')` ile çevrilerek
+    kopyalanır. Şifre hash'leri olduğu gibi (`$2a$`, S05 doğruluyor).
   - Şema dump'ı CLI ile parolasız alınabiliyor:
     `supabase db dump --project-ref <ref> [--data-only] -f dumps/…`
     (geçici giriş rolü, IPv4 pooler; colima'da `DOCKER_HOST` gerekli).

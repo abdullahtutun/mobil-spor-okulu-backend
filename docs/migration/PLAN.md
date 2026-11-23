@@ -40,7 +40,7 @@ Gerekçeleriyle birlikte. Bir oturum bunlardan birini değiştirirse burayı ve
 | K5 | RLS korunur: istek başına `set local role` + `request.jwt.claims` | 127 `auth.uid()` ve tüm politikalar değişmeden çalışır |
 | K6 | `POST /rpc/:name` + allow-list, PostgREST ile aynı parametre adları ve JSON | Uygulamalarda DTO/mapper değişmez |
 | K7 | `.from()` okumaları `SECURITY INVOKER` SQL fonksiyonlarına çevrilir | PostgREST klonu yazmamak; tek kapı RPC |
-| K8 | Auth bizim, Supabase uyumlu: `auth.users` aynı id/hash, JWT HS256 aynı claim adlarıyla, dönen refresh token | Kimse şifre sıfırlamaz; SQL'deki `auth.*` kullanımı çalışır |
+| K8 | Auth bizim, Supabase uyumlu: `auth.users` aynı id/hash, JWT HS256 aynı claim adlarıyla, dönen refresh token (DB'de SHA-256). Şifre kuralı Supabase projesindeki gibi: en az 6 karakter, karakter türü şartı yok, en çok 72 bayt (S05; `docs/api/auth.md`) | Kimse şifre sıfırlamaz; SQL'deki `auth.*` kullanımı çalışır |
 | K9 | Storage: dosya diskte, metadata `storage.objects`'te, politikalar aynen | 18 bucket politikası yeniden yazılmaz |
 | K10 | pg_net ve Vault yok; `pg_notify` + API'de `LISTEN` | Dışa HTTP çağıran veritabanı yok, sır DB'de değil |
 | K11 | Realtime: `ws` tabanlı Nest gateway, kanal başına kullanıcı | Supabase Realtime'ın bizdeki tek kullanımı gelen kutusu |

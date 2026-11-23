@@ -12,7 +12,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S02 | tamam | 2026-11-23 | Kapı yayında; canlı migration kullanıcı tarafından uygulandı; mağaza sürümü 1.1.2+10 kullanıcıda |
 | S03 | tamam | 2026-11-23 | Şema dump'ı + compat (roller, auth, storage, pg_notify), dbmate 0001–0004, seed, canlıyla 9 parmak izi aynı |
 | S04 | tamam | 2026-11-23 | DbContextService (rol+claims+timeout), JWT doğrulama, `POST /rpc/:name` + 65'lik allow-list, PostgREST hata eşlemesi, CORS/gövde/hız sınırı |
-| S05 | bekliyor | | |
+| S05 | tamam | 2026-11-23 | Parola girişi, JWT (GoTrue claim'leri), hash'li dönen refresh token + çalınma tespiti, logout kapsamları, /auth/user, kaba kuvvet sınırları, `auth_service` rolü |
 | S06 | bekliyor | | |
 | S07 | bekliyor | | |
 | S08 | bekliyor | | |
@@ -45,6 +45,74 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S05 — Auth çekirdeği (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna bakın; sözleşme
+  `docs/api/auth.md`. Orkestratörle, kullanıcıya sorulmadan çalıştırıldı;
+  karar gerektiren konu çıkmadı. Canlıya yalnızca salt okunur, toplu
+  sorgular atıldı (hash önekleri/maliyetleri, oturum ve refresh token
+  sayıları/uzunlukları): 7 kullanıcı, hepsi `$2a$` (3'ü maliyet 10 —
+  GoTrue; 4'ü maliyet 6 — pgcrypto ile elle eklenmiş demo hesapları),
+  onaysız/yasaklı/silinmiş yok; 55 oturum, refresh token'lar 12 karakter
+  düz metin.
+- Kendi verdiğim küçük kararlar:
+  - **Ayrı DB rolü `auth_service`** (0005): auth modülü auth tablolarına
+    service_role ile değil, yalnızca o tablolara (ve `auth.users`'ta dört
+    sütunun güncellemesine) yetkili, bypassrls olmayan bir rolle erişir.
+    Hiçbir token bu role çözülmez.
+  - **Refresh token DB'de SHA-256** (oturum dosyası "hash'li" diyordu).
+    Bedeli: GoTrue'nun "yanıtı kaybolan yenilemede geçerli token'ı geri
+    ver" kuralı uygulanamaz (düz metin yok); onun yerine geçerli token da
+    döndürülüp yenisi verilir. Kabul kuralları GoTrue'nunkiyle aynı:
+    geçerli token'ın ebeveyni süresiz (çevrimdışı salon), başka iptal
+    edilmiş token 10 sn içinde; dışında **oturum silinir**
+    (`refresh_token_already_used`) — GoTrue yalnızca token'ları iptal eder,
+    biz oturumu da kapatıyoruz (`/auth/user` da düşsün).
+  - **bcryptjs** (saf JS, yerel derleme yok); yeni hash'ler `$2a$10$`
+    (bcryptjs'in `$2b$`'si yeniden adlandırılır — pgcrypto ve GoTrue okur,
+    e2e'de pgcrypto ile sınandı).
+  - **Şifre kuralı**: ≥ 6 karakter, ≤ 72 bayt, tür şartı yok. Supabase'in
+    auth ayarları SQL ile okunamıyor; değer yönetim AGENTS.md'sinden
+    ("Password rule", Supabase'in varsayılanı). PLAN.md K8'e yazıldı.
+    Kullanıcı panelde farklı bir değer gördüyse `password-policy.ts`
+    tek satır.
+  - **Kaba kuvvet**: IP başına 30/5 dk (Supabase), IP+e-posta 10 yanlış/
+    15 dk, e-posta başına 20 yanlış/saat (dağıtık tahmin; bedeli: biri bir
+    hesabı bilerek bir saat kilitleyebilir). Hepsi bcrypt'ten önce ve hesap
+    olup olmadığına bakmadan; bilinmeyen e-postada da maliyet-10 bcrypt
+    (zamanlama testi var). Bellekte, tek süreç.
+  - **Çıkış süresi geçmiş token'ı kabul eder** (imza doğruysa); çıkış
+    erişimi yalnızca azaltır. Kapsam sorguda (`?scope=`, supabase-dart) ya
+    da gövdede.
+  - **Şifre değişince diğer oturumlar kapanır** (GoTrue gibi).
+  - **`PUT /auth/user` `data`**: sunucunun yazdığı ve SQL'in güvendiği
+    metadata anahtarları (`brand`, `created_by`, `is_creator` …)
+    değiştirilemez — Supabase'te açıktı (`save_staff_profile`
+    `created_by`'a güveniyor). Uygulamalar `data` göndermiyor.
+  - Access token durumsuz (`/rpc/*` oturuma bakmaz), Supabase gibi.
+  - Hata gövdesi `{code, message}`, `code` = GoTrue `error_code`; HTTP
+    durumları GoTrue'nunkiler. Yasaklı kullanıcının yenilemesi 403
+    `user_banned`.
+- Sonraki oturumlar için:
+  - S06: `AuthService.respond` mantığı (oturum + refresh + yanıt) verify
+    uçlarında da kullanılmalı — `signInWithPassword`'un oturum açan kısmı
+    bir yardımcıya çıkarılabilir. `auth_service`'e insert (users,
+    identities), `recovery_token` vb. sütun güncellemeleri yeni migration'la
+    eklenir; `test/schema.e2e-spec.ts`'teki yetki listesi güncellenir.
+    Yeni şifre `PasswordHasher.hash` + `passwordPolicyError`.
+  - S09: `delete_own_account` oturumları siliyor → refresh
+    `refresh_token_not_found`, `/auth/user` `session_not_found` (sınandı,
+    oturum silme taklidiyle).
+  - S12: Supabase'in refresh token'ları 12 karakter düz metin. Açık
+    oturumlar taşınacaksa `token` ve `parent` **SHA-256'ya çevrilerek**
+    kopyalanmalı (`encode(sha256(token::bytea), 'hex')`), yoksa hiçbiri
+    eşleşmez; `JWT_SECRET` de Supabase'inki olmalı.
+  - S13/S14: istemci `POST <api>/auth/token?grant_type=…`, `/auth/logout?scope=`,
+    `/auth/user`; hata `code`'u bugünkü `AuthException.code` yerine. RPC'de
+    401 `PGRST303` → yenile → tekrar (bugünkü `SessionRetryClient`); yenileme
+    400/403 → oturum bitti, ağ hatası → geçici.
+  - S16: `TRUST_PROXY` IP sınırları için de şart; `JWT_ISSUER`; çok süreçte
+    sınır sayaçları paylaşılmaz.
 
 ### S04 — DB istek bağlamı ve RPC kapısı (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna bakın. Orkestratörle,

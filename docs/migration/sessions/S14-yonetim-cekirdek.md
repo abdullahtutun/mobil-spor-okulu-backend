@@ -18,6 +18,11 @@ Edge Function'lar ve realtime S15'te.
   `features/auth/`, `features/set_password/`, `features/wizard/`
 
 ## Yapılacaklar
+- **S05'ten:** auth uçları ve hata kodları `docs/api/auth.md`'de
+  (`/auth/token?grant_type=password|refresh_token`, `/auth/logout?scope=`,
+  `/auth/user`). Refresh token her kullanımda döner — yanıttaki yenisi
+  saklanmalı; 400/403 = oturum bitti (çıkış), ağ hatası = geçici. RPC'de
+  401 `PGRST303`/`PGRST301` → bir kez yenile, tekrar gönder.
 - [ ] `migrate/own-backend` dalı.
 - [ ] S13'teki `ApiClient` ve `AuthSession` (aynı tasarım; ortak paket
       çıkarmak gerekip gerekmediği günlüğe — varsayılan: kopya).

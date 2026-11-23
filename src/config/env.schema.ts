@@ -28,6 +28,26 @@ export const envSchema = z.object({
     ),
   // HS256 imza anahtarı; Supabase'in JWT secret'ı gibi en az 32 karakter.
   JWT_SECRET: z.string().min(32, 'en az 32 karakter olmalı'),
+  // Access token süresi (sn); Supabase'in varsayılanı 3600.
+  JWT_EXPIRY_SEC: z.coerce.number().int().min(60).max(86_400).default(3600),
+  // Access token'ın `iss` claim'i (Supabase: <proje>/auth/v1). Doğrulamada
+  // bakılmaz; yalnızca kimin ürettiğini söyler.
+  JWT_ISSUER: z.string().min(1).default('mobil-spor-okulu-api'),
+  // Kullanılmış (dönmüş) bir refresh token'ın kabul edildiği süre (sn):
+  // eşzamanlı yenilemeler ve yanıtı ağda kaybolan yenileme için (GoTrue: 10).
+  AUTH_REFRESH_REUSE_INTERVAL_SEC: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(300)
+    .default(10),
+  // Kaba kuvvet koruması (POST /auth/token?grant_type=password):
+  //   IP başına 5 dakikada en fazla AUTH_LOGIN_IP_LIMIT deneme (Supabase: 30);
+  //   IP + e-posta başına 15 dakikada AUTH_LOGIN_FAILURE_LIMIT yanlış şifre;
+  //   e-posta başına (tüm IP'ler) 1 saatte AUTH_LOGIN_EMAIL_FAILURE_LIMIT.
+  AUTH_LOGIN_IP_LIMIT: z.coerce.number().int().min(1).default(30),
+  AUTH_LOGIN_FAILURE_LIMIT: z.coerce.number().int().min(1).default(10),
+  AUTH_LOGIN_EMAIL_FAILURE_LIMIT: z.coerce.number().int().min(1).default(20),
   // Tarayıcıdan çağırabilecek kökenler, virgülle. Boşsa CORS kapalı
   // (mobil uygulamaların CORS'a ihtiyacı yok).
   CORS_ORIGINS: z

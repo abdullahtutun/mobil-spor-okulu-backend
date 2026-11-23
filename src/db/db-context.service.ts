@@ -6,6 +6,13 @@ import { DB_POOL } from './db.tokens';
 export const DB_ROLES = ['anon', 'authenticated', 'service_role'] as const;
 export type DbRole = (typeof DB_ROLES)[number];
 
+/**
+ * Yalnızca auth modülünün geçtiği dar rol (0005_auth_service_role.sql):
+ * auth.users / sessions / refresh_tokens. Hiçbir token bu role çözülmez.
+ */
+export const AUTH_SERVICE_ROLE = 'auth_service';
+type ContextRole = DbRole | typeof AUTH_SERVICE_ROLE;
+
 /** `request.jwt.claims`'e yazılan JWT yükü (Supabase'in claim adlarıyla). */
 export type JwtClaims = Record<string, unknown> & {
   role?: string;
@@ -13,7 +20,7 @@ export type JwtClaims = Record<string, unknown> & {
 };
 
 export interface DbRequestContext {
-  role: DbRole;
+  role: ContextRole;
   /** Verilmezse `{ role }`; PostgREST'in tokensız istekte yazdığıyla aynı. */
   claims?: JwtClaims;
   /** Milisaniye; verilmezse rolün varsayılanı (`STATEMENT_TIMEOUT_MS`). */
@@ -26,10 +33,11 @@ export interface DbRequestContext {
  * dayanıyor: "Supabase cancels an authenticated query after 8 s").
  * service_role sunucunun kendi işleri (toplu aktarım, cron benzeri işler).
  */
-export const STATEMENT_TIMEOUT_MS: Record<DbRole, number> = {
+export const STATEMENT_TIMEOUT_MS: Record<ContextRole, number> = {
   anon: 3_000,
   authenticated: 8_000,
   service_role: 60_000,
+  auth_service: 5_000,
 };
 
 /**
@@ -67,7 +75,10 @@ export class DbContextService {
   ): Promise<T> {
     // Rol SQL'e metin olarak girer (`set role` parametre almaz); yalnızca
     // bilinen üç addan biri olabilir.
-    if (!DB_ROLES.includes(context.role)) {
+    if (
+      !(DB_ROLES as readonly string[]).includes(context.role) &&
+      context.role !== AUTH_SERVICE_ROLE
+    ) {
       throw new Error(`Bilinmeyen veritabanı rolü: ${String(context.role)}`);
     }
     const claims: JwtClaims = context.claims ?? { role: context.role };
@@ -116,6 +127,11 @@ export class DbContextService {
     work: (client: PoolClient) => Promise<T>,
   ): Promise<T> {
     return this.run({ role }, work);
+  }
+
+  /** Auth modülünün kendi işleri (giriş, oturum, refresh token). */
+  asAuthService<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    return this.run({ role: AUTH_SERVICE_ROLE }, work);
   }
 
   /** Oturum açmış kullanıcı: `authenticated` + token'ın claim'leri. */

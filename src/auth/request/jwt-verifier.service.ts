@@ -12,6 +12,15 @@ export interface RequestAuth {
   claims: JwtClaims;
 }
 
+export interface VerifyOptions {
+  /**
+   * Süresi geçmiş ama imzası doğru token'ı kabul et. Yalnızca
+   * `POST /auth/logout`: çıkış erişimi yalnızca azaltır; token'ı süresi
+   * geçmiş bir cihaz da oturumunu kapatabilmeli.
+   */
+  ignoreExpiration?: boolean;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -38,7 +47,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export class JwtVerifier {
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
 
-  fromAuthorizationHeader(header: string | undefined): RequestAuth {
+  fromAuthorizationHeader(
+    header: string | undefined,
+    options: VerifyOptions = {},
+  ): RequestAuth {
     if (header === undefined || header.trim() === '') {
       return { role: 'anon', claims: { role: 'anon' } };
     }
@@ -49,15 +61,16 @@ export class JwtVerifier {
         'Authorization başlığı "Bearer <token>" olmalı.',
       );
     }
-    return this.verify(match[1]);
+    return this.verify(match[1], options);
   }
 
-  verify(token: string): RequestAuth {
+  verify(token: string, options: VerifyOptions = {}): RequestAuth {
     let payload: string | jwt.JwtPayload;
     try {
       payload = jwt.verify(token, this.config.JWT_SECRET, {
         // Algoritma sabit: `none` ya da RS/HS karışıklığı kabul edilmez.
         algorithms: ['HS256'],
+        ignoreExpiration: options.ignoreExpiration === true,
       });
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {

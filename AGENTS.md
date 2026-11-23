@@ -65,7 +65,7 @@ src/
   common/            errors, guards, decorators, interceptors, pipes
   db/                pg Pool, Kysely, DbContextService (withRole / withUser)
   rpc/               POST /rpc/:name gateway + allow-list (rpc-allowlist.ts), pg_proc signature cache
-  auth/              request/ (S04: JwtVerifier, RequestAuthGuard, @ReqAuth); later login, refresh, logout, OTP flows, sessions
+  auth/              request/ (S04: JwtVerifier, RequestAuthGuard, @ReqAuth); S05: /auth/token, /logout, /user (docs/api/auth.md); S06 OTP flows
   mail/              per-brand SMTP + templates
   storage/           buckets on disk + storage.objects
   realtime/          WebSocket gateway fed by LISTEN/NOTIFY
@@ -85,6 +85,7 @@ test/                e2e + integration (Testcontainers, real Postgres)
   support/           database.ts (build image, start, dbmate up, seed), docker-env.ts
   fixtures/          seed.sql (made-up data: two schools, two brands, every role) + seed-ids.ts
 docs/migration/      plan, progress log, session files
+docs/api/            API contracts the apps are rewritten against (auth.md)
 ```
 
 Each feature module follows `controller → service → repository`; a
@@ -200,7 +201,26 @@ npm run db:migrate && npm run test:e2e
   (`code` = SQLSTATE, `details`/`hint` null if absent); token errors
   `PGRST301` / `PGRST303` (the apps refresh on these).
 
-### Docker on this Mac (colima)
+## Auth (S05)
+
+- Contract: `docs/api/auth.md`. GoTrue-compatible: same `auth.users` rows and
+  bcrypt hashes, access token claims as Supabase's, errors `{code, message}`
+  with GoTrue's `error_code` values.
+- The auth module reaches the auth tables only through
+  `DbContextService.asAuthService` (role `auth_service`, 0005: auth tables
+  only, no bypassrls, no public access). A later session that needs more
+  (insert users, OTP columns) grants it in a new migration and updates the
+  grant list pinned in `test/schema.e2e-spec.ts`.
+- Refresh tokens are stored as SHA-256 hex in `auth.refresh_tokens.token`/
+  `parent`, never in plain text. Reuse outside the rules deletes the whole
+  session (`refresh_token_already_used`).
+- Wrong password, unknown e-mail, banned and deleted accounts give the same
+  `invalid_credentials`; rate limits apply before bcrypt and regardless of
+  whether the account exists. Keep it that way.
+- Passive accounts, roles and brands are **not** checked at login — that
+  stays in the apps via `get_session_data`.
+
+## Docker on this Mac (colima)
 
 Docker runs in **colima** (`colima start --cpu 2 --memory 4`); Docker
 Desktop was removed. `docker compose` works directly (fixed 2026-11-23:

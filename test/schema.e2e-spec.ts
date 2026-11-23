@@ -211,12 +211,13 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
       ).toBeNull();
     });
 
-    it('api_authenticator yalnızca üç role geçebilir, kendisi yetkisiz', async () => {
+    it('api_authenticator yalnızca üç istek rolüne ve auth_service’e geçebilir, kendisi yetkisiz', async () => {
       const { rows } = await client.query<{ rolname: string }>(
         "select r.rolname from pg_auth_members m join pg_roles r on r.oid = m.roleid join pg_roles u on u.oid = m.member where u.rolname = 'api_authenticator' order by 1",
       );
       expect(rows.map((r) => r.rolname)).toEqual([
         'anon',
+        'auth_service',
         'authenticated',
         'service_role',
       ]);
@@ -229,6 +230,36 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
         rolsuper: false,
         rolbypassrls: false,
       });
+    });
+
+    it('auth_service: yalnızca auth tabloları, public’e erişimi yok, bypassrls değil', async () => {
+      const { rows } = await client.query<{ t: string; p: string }>(
+        `select table_schema || '.' || table_name as t,
+                string_agg(privilege_type, ',' order by privilege_type) as p
+           from information_schema.role_table_grants
+          where grantee = 'auth_service' group by 1 order by 1`,
+      );
+      expect(rows).toEqual([
+        { t: 'auth.identities', p: 'SELECT' },
+        { t: 'auth.refresh_tokens', p: 'DELETE,INSERT,SELECT,UPDATE' },
+        { t: 'auth.sessions', p: 'DELETE,INSERT,SELECT,UPDATE' },
+        { t: 'auth.users', p: 'SELECT' },
+      ]);
+      const { rows: cols } = await client.query<{ c: string }>(
+        `select column_name as c from information_schema.column_privileges
+          where grantee = 'auth_service' and table_name = 'users'
+            and privilege_type = 'UPDATE' order by 1`,
+      );
+      expect(cols.map((r) => r.c)).toEqual([
+        'encrypted_password',
+        'last_sign_in_at',
+        'raw_user_meta_data',
+        'updated_at',
+      ]);
+      const { rows: flags } = await client.query(
+        "select rolcanlogin, rolbypassrls from pg_roles where rolname = 'auth_service'",
+      );
+      expect(flags[0]).toEqual({ rolcanlogin: false, rolbypassrls: false });
     });
 
     it('request_push_dispatch() pg_notify ile push_dispatch kanalına dürter', async () => {

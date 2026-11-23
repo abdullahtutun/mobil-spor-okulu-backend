@@ -17,6 +17,12 @@ Velinin ve okulun gördüğü e-postalar bugünküyle aynı.
 - Y `AGENTS.md` → "Brands", şifre sıfırlama bölümü
 
 ## Yapılacaklar
+- **S05'ten:** oturum açan yanıt `AuthService` içinde (`signInWithPassword` →
+  oturum + refresh + `respond`); verify uçları aynısını kullanmalı. Auth
+  tablolarına `DbContextService.asAuthService` (rol `auth_service`) ile;
+  ek yetkiler (users/identities insert, token sütunları) yeni migration +
+  `test/schema.e2e-spec.ts`'teki yetki listesi. Şifre `PasswordHasher.hash`
+  + `passwordPolicyError`; hız sınırı için `LoginRateLimiter` örnek.
 - [ ] `src/mail/`: nodemailer, marka başına transport (`SMTP_HOST`,
       `SMTP_PORT`, `SMTP_USER_*`, `SMTP_PASS_*`); bir markanın kutusu yoksa
       gönderme ve hata ver (bugünkü kural). Şablonlar ve konu satırları

@@ -30,6 +30,11 @@ export function setTestEnv(
     THROTTLE_LIMIT: '10000',
     THROTTLE_TTL_MS: '60000',
     TRUST_PROXY: '0',
+    // Testler aynı IP'den çok giriş yapar; sınırı sınayan test kendi değerini verir.
+    AUTH_LOGIN_IP_LIMIT: '100000',
+    AUTH_LOGIN_FAILURE_LIMIT: '100000',
+    AUTH_LOGIN_EMAIL_FAILURE_LIMIT: '100000',
+    AUTH_REFRESH_REUSE_INTERVAL_SEC: '10',
     ...extra,
   });
 }
