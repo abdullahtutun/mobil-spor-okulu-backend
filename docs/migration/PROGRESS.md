@@ -39,18 +39,20 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
 - S02: iOS App Store adresleri (`app_min_versions.store_url`) S17'den önce
   yazılmalı.
 
-- 20261123 (S09 düzeltmesi): yönetim reposundaki
-  `20261123_parent_email_change.sql` + `update-parent` canlıya henüz
-  dağıtılmadı (kullanıcıda). Uygulanınca `scripts/schema-fingerprint.sql`
-  canlıda salt okunur çalıştırılıp `test/schema.e2e-spec.ts`'teki
-  `NOT_YET_LIVE` / `NOT_YET_LIVE_FINGERPRINT` `LIVE`'a taşınmalı.
-
 VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 ## Günlük
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### Bakım — 0008 canlıda (2026-11-23)
+- Kullanıcı `20261123_parent_email_change.sql`'i canlıya uyguladı ve
+  `update-parent` v25'i dağıttı (orkestratör doğruladı: SECURITY DEFINER,
+  yalnızca service_role). `scripts/schema-fingerprint.sql` canlıda salt okunur
+  çalıştırıldı: `fn` = `c31f6c33…` (yerelle aynı), fonksiyon sayısı 168;
+  diğer sekiz parmak izi değişmedi. `test/schema.e2e-spec.ts`'te
+  `NOT_YET_LIVE*` boşaltıldı, değerler `LIVE`'a alındı.
 
 ### S09 düzeltmesi — veli e-posta değişikliği (2026-11-23)
 - Karar (kullanıcı, orkestratör üzerinden): `update-parent`'ta e-posta

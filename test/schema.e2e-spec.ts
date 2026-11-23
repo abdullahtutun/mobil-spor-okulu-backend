@@ -9,7 +9,9 @@ import { startTestDatabase, type TestDatabase } from './support/database';
  * aynı mı?
  *
  * Beklenen değerler canlıdan SALT OKUNUR alındı (2026-11-23, Supabase MCP
- * `execute_sql`, Postgres 17.6; 20261027_app_min_versions canlıda):
+ * `execute_sql`, Postgres 17.6; 20261027_app_min_versions canlıda;
+ * 20261123_parent_email_change canlıya uygulandıktan sonra fonksiyon sayısı
+ * ve `fn` parmak izi yeniden alındı, S10):
  *   - sayılar: pg_class / pg_proc / pg_policies / pg_trigger / pg_indexes /
  *     pg_constraint / pg_type (public), pg_policies (storage), cron.job,
  *     storage.buckets — sorgular aşağıdaki `count` ifadeleriyle aynı;
@@ -22,7 +24,7 @@ import { startTestDatabase, type TestDatabase } from './support/database';
  */
 const LIVE = {
   tables: 34,
-  functions: 167,
+  functions: 168,
   policies: 73,
   triggers: 28,
   indexes: 93,
@@ -33,10 +35,7 @@ const LIVE = {
   buckets: 2,
 } as const;
 
-const NOT_YET_LIVE: Partial<Record<keyof typeof LIVE, number>> = {
-  // 0008_parent_email_change (yönetim 20261123): reset_parent_login_email.
-  functions: 1,
-};
+const NOT_YET_LIVE: Partial<Record<keyof typeof LIVE, number>> = {};
 
 /**
  * Canlıya henüz uygulanmamış migration'ların değiştirdiği parmak izleri:
@@ -44,10 +43,7 @@ const NOT_YET_LIVE: Partial<Record<keyof typeof LIVE, number>> = {
  * `scripts/schema-fingerprint.sql`'i canlıda salt okunur çalıştırıp
  * karşılaştır, sonra `LIVE_FINGERPRINT`'e taşı ve bunu boşalt).
  */
-const NOT_YET_LIVE_FINGERPRINT: Partial<Record<string, string>> = {
-  // 0008_parent_email_change (yönetim 20261123)
-  fn: 'c31f6c337e3a67bc1b05f9d127a7ed89',
-};
+const NOT_YET_LIVE_FINGERPRINT: Partial<Record<string, string>> = {};
 
 /**
  * Yalnızca yeni backend'de olan, canlıya hiç gitmeyecek nesneler: S07'nin
@@ -63,7 +59,7 @@ const LIVE_FINGERPRINT: Record<string, string> = {
   cols: '31fbd54f69f58118ac7fe60736dd3456',
   con: '55812830fd429742ecd1ef1336a519f8',
   cron: 'af4b1bd8f12d1abbc0f8af65b184c7ea',
-  fn: 'f37698fa72d1df177de671acd550465d',
+  fn: 'c31f6c337e3a67bc1b05f9d127a7ed89',
   idx: '6ce934c874e41e88cd16ce566ad7b833',
   pol: 'ade9207d99f4929fec22d341a782333b',
   spol: '9008b210f0980c9209dc3409564eb9b3',

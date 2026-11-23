@@ -145,10 +145,10 @@ docker compose --profile api up -d --build   # API image too (what Coolify build
 Supabase stays production until S17, so schema changes keep being written
 as migrations in `../mobil_spor_okulu/supabase/migrations/` and applied to
 Supabase there. The baseline (dump of 2026-11-23) already contains every
-management migration **up to and including `20261027_app_min_versions.sql`**.
-`0008_parent_email_change.sql` (= `20261123_parent_email_change.sql`) is
-imported but **not yet live**: its objects are in `NOT_YET_LIVE` /
-`NOT_YET_LIVE_FINGERPRINT` of `test/schema.e2e-spec.ts`.
+management migration **up to and including `20261027_app_min_versions.sql`**;
+`0008_parent_email_change.sql` (= `20261123_parent_email_change.sql`) was
+imported afterwards and is live too (its values are in `LIVE`; nothing is
+in `NOT_YET_LIVE` now).
 **Every newer management migration is carried over here**:
 
 ```bash
