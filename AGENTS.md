@@ -71,7 +71,7 @@ src/
   storage/           S08: /storage/object/* (storage-api compatible, docs/api/storage.md); disk-store, object-key, mime, multipart
   realtime/          WebSocket gateway fed by LISTEN/NOTIFY
   push/              FCM worker (ex send-push)
-  accounts/          ex create-user, update-user, create-parent, update-parent, delete-account
+  accounts/          S09: POST /functions/{create-user,update-user,create-parent,update-parent,delete-account} (docs/api/functions.md)
   pre-registration/  ex submit-/convert-/bulk-convert-pre-registration
   site-lead/         ex site-lead
   health/
@@ -87,7 +87,7 @@ test/                e2e + integration (Testcontainers, real Postgres)
                      postgrest.ts (a real PostgREST on the test db — S07's read functions are diffed against it)
   fixtures/          seed.sql (made-up data: two schools, two brands, every role) + seed-ids.ts
 docs/migration/      plan, progress log, session files
-docs/api/            API contracts the apps are rewritten against (auth.md, storage.md)
+docs/api/            API contracts the apps are rewritten against (auth.md, storage.md, functions.md)
 ```
 
 Each feature module follows `controller → service → repository`; a
@@ -280,6 +280,24 @@ npm run db:migrate && npm run test:e2e
   signature; a new image type for a bucket needs its signature in `mime.ts`.
 - e2e: each app gets its own temp `STORAGE_ROOT` (`test/support/app.ts`);
   `app.get(StorageService).store.root` is the folder.
+
+## Account functions (S09)
+
+- Ex Edge Functions at `POST /functions/<name>` with the **same bodies,
+  replies, HTTP codes and `reason`s** (`docs/api/functions.md`): the apps
+  read them with `RpcEnvelope.fromEdge` / `fromFunctionException`. Shapes in
+  `src/accounts/function-response.ts`; never return the API's generic
+  `{code, message}` from a function except for token errors (401 `PGRST30x`,
+  the old gateway's job).
+- **Order of checks is the Edge Functions' order** and is security-relevant:
+  validate (`save_staff_profile(p_validate_only)`, `can_manage_parent`,
+  `has_branch_access`) before touching an auth user, e-mail or password,
+  before an invite leaves, before deleting anything. The caller comes from
+  the token only (`CallerResolver`, `/auth/user` rules), never the body.
+- SQL runs **as the caller** (`withUser`) so RLS and the SQL functions
+  decide; service_role only for `schoolBrand` and `delete_own_account`.
+  Auth users only through `AuthAdminService`; account deletion is
+  `delete_own_account` (tombstone), never `deleteUser`.
 
 ## Docker on this Mac (colima)
 

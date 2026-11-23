@@ -16,7 +16,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S06 | tamam | 2026-11-23 | Kodla sıfırlama, açık kayıt + kod + resend, davet bağlantısı, `AuthAdminService`, marka başına SMTP (hook içeriği birebir), hash'li kodlar + deneme sayacı, taramasız yanıtlar, gönderim/doğrulama sınırları |
 | S07 | tamam | 2026-11-23 | 26 `.from()` okuması → 23 SECURITY INVOKER fonksiyon (+ S11'e `get_notification`), allow-list `READS`; gerçek PostgREST'le 10 kullanıcıda JSON fark testi |
 | S08 | tamam | 2026-11-23 | storage-api uyumlu `/storage/object/*` (yükleme/upsert, oturumlu ve public okuma, toplu silme), satırlar isteğin rolüyle (8 canlı politika aynen), disk `STORAGE_ROOT`, ad/tür/boyut/sembolik bağ korumaları |
-| S09 | bekliyor | | |
+| S09 | tamam | 2026-11-23 | `POST /functions/{create-user,update-user,create-parent,update-parent,delete-account}`, Edge gövdeleri/kodları bire bir, denetim sırası aynı; 61 e2e (hiyerarşi, yetki, şube, kendi hesap, rol 8, e-posta değişikliği, son genel müdür, hız sınırı) |
 | S10 | bekliyor | | |
 | S11 | bekliyor | | |
 | S12 | bekliyor | | |
@@ -39,12 +39,60 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
 - S02: iOS App Store adresleri (`app_min_versions.store_url`) S17'den önce
   yazılmalı.
 
+- S09: bağı olan velinin e-postası değişince `update-parent` canlıda da
+  bozuk (eski auth hesabı FK yüzünden silinemiyor; yeni hesap + davet
+  yetim kalıyor). Yeni backend'e bire bir taşındı. Düzeltme (ör. eski
+  hesabın e-postasını `updateUserById` ile değiştirip yeniden davet etmek ya
+  da eski profili mezar taşına çevirmek) ürün kararı: yönetim reposunda mı
+  (canlı), yeni backend'de mi, ikisinde mi? (kullanıcıda)
+
 VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 ## Günlük
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S09 — Hesap işlemleri (2026-11-23)
+- Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/api/functions.md`'ye
+  bakın. Orkestratörle, kullanıcıya sorulmadan çalıştırıldı; plan kararı
+  (K1–K16) değişmedi, migration yok. Canlıya yalnızca salt okunur
+  `list_edge_functions` (beşi de `verify_jwt: true`).
+- Kendi verdiğim kararlar:
+  - **Yol `POST /functions/<ad>`**, gövde/yanıt/HTTP kodu/`reason` Edge
+    Function'larınkiyle aynı (personel/veli: 200 `{success, message}`, 400
+    `{success:false, error}`; delete-account: `app_ok/app_err` + `reason`).
+    `verify_jwt`'nin karşılığı: başlıksız 401, geçersiz token 401 `PGRST30x`
+    (SessionRetryClient yeniler), anon anahtarı fonksiyonun kendi hatası.
+  - **Çağıran = `/auth/user` kuralı** (oturum açık, hesap silinmemiş/
+    yasaklı değil): GoTrue'nun `getUser()`'ı. Çıkış yapılmış ya da silinmiş
+    hesabın süresi geçmemiş token'ı da reddedilir.
+  - **SQL çağrıları çağıranın rolüyle** (Edge'in `supabaseCaller`'ı);
+    service_role yalnızca `schoolBrand` ve `delete_own_account`.
+  - **Veli yazımları tek transaction** (Edge'de ayrı istekler). Yanıtlar
+    aynı; fark yalnızca yarım yazım kalmaması.
+  - **Hesap silmede şifre** `AuthService.verifyPassword`: oturum açmaz,
+    girişin kaba kuvvet sayaçlarını paylaşır (sınır 429 `rate_limited`).
+  - Gövdede zod ile yalnızca tip denetimi (metin/liste); kurallar SQL'de.
+  - Canlının e-posta değişikliği hatası düzeltilmedi (davranış değişikliği,
+    ürün kararı) → açık sorular.
+- Sonraki oturumlar için:
+  - S10: ön kayıt fonksiyonlarını aynı `/functions/` köküne ekle, ama
+    `FunctionsController` sınıf düzeyinde `AuthorizationHeaderGuard`
+    (başlık zorunlu) taşıyor — `submit-pre-registration` (anon, Supabase'te
+    `verify_jwt: true` ama anon anahtarıyla) ve `site-lead`
+    (`--no-verify-jwt`, başlık yok) için ayrı controller ya da metot
+    düzeyinde guard gerekir. Gövde şekilleri için `function-response.ts`
+    (`edgeFailure`, `envelopeFailure`, `FunctionsExceptionFilter`) ve
+    `CallerResolver`; davet `AuthAdminService.inviteUser`, marka
+    `AccountsRepository.schoolBrand`.
+  - S13/S14/S15: `functions.invoke(ad)` → `POST <API>/functions/<ad>`
+    (aynı gövde, `Authorization: Bearer`). supabase-dart'ın
+    `FunctionException`'ına bağlı `RpcEnvelope.fromFunctionException` ve
+    `mapDeleteAccountFailure` yeni istemcide HTTP hata gövdesinden aynı
+    alanları okumalı (`reason`, `message`, `error`, `code`).
+  - S12: canlıda e-posta değişikliği hatasından kalmış yetim veli hesapları
+    olabilir (davet edilmiş, onaysız, bağlı); taşımadan önce sayılmalı.
 
 ### S08 — Dosya depolama (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/api/storage.md`'ye

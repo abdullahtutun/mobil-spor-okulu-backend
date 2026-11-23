@@ -15,6 +15,12 @@ kesin kayda aktarılması; bugünkü kötüye kullanım korumalarıyla birlikte.
 - Y `features/public_pre_registration/`, `features/registration/data/source/pre_registration/`
 - Site `src/infrastructure/lead/`, `src/config/site.ts`
 
+- **S09'dan:** `src/accounts/` — `FunctionsController` (`/functions/` kökü;
+  sınıf düzeyinde `AuthorizationHeaderGuard` başlığı zorunlu kılar: anon ve
+  `--no-verify-jwt` fonksiyonları için ayrı controller ya da metot düzeyinde
+  guard), `function-response.ts` (Edge gövdeleri, `FunctionsExceptionFilter`),
+  `CallerResolver`, `AccountsRepository.schoolBrand`, `AuthAdminService.inviteUser`.
+
 ## Yapılacaklar
 - [ ] `POST /functions/submit-pre-registration` (anon): Turnstile doğrulama,
       istemci IP'si (Caddy'den `X-Forwarded-For`, yalnızca güvenilen proxy),

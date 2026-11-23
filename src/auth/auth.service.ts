@@ -113,6 +113,38 @@ export class AuthService {
     return this.db.asAuthService((c) => this.sessions.open(c, user, client));
   }
 
+  /**
+   * Oturum açmadan şifre denetimi (hesap silme, S09). Girişin kaba kuvvet
+   * sınırları aynen uygulanır ve aynı sayaçları kullanır: silme ekranı
+   * girişin yanında ikinci bir tahmin kapısı olmasın. Sınır aşılırsa 429
+   * `over_request_rate_limit` fırlar. Edge Function bunu GoTrue'nun giriş
+   * ucuyla yapıyordu (bir oturum açıp kapatarak); burada oturum hiç açılmaz.
+   */
+  async verifyPassword(
+    rawEmail: string,
+    password: string,
+    client: ClientInfo,
+  ): Promise<boolean> {
+    const email = rawEmail.trim().toLowerCase();
+    const ipKey = client.ip ?? 'unknown';
+    const retryAfter = this.limiter.tryAttempt(ipKey, email);
+    if (retryAfter > 0)
+      throw rateLimited('over_request_rate_limit', retryAfter);
+
+    const user = await this.db.asAuthService((c) =>
+      this.repo.findUserByEmail(c, email),
+    );
+    const ok = user
+      ? await this.hasher.verify(password, user.encrypted_password)
+      : (await this.hasher.burn(password), false);
+    if (!user || !ok || isLockedOut(user)) {
+      this.limiter.recordFailure(ipKey, email);
+      return false;
+    }
+    this.limiter.recordSuccess(ipKey, email);
+    return true;
+  }
+
   // ── grant_type=refresh_token ──────────────────────────────────────────
 
   /**

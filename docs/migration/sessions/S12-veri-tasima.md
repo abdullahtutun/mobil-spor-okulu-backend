@@ -18,6 +18,10 @@ ve yerelde provası. S17 bu araçları geçiş gecesi çalıştırır.
   değişiyor). Evet denirse `JWT_SECRET` Supabase'in legacy secret'ı olur ve
   refresh token'lar taşınır.
 
+- **S09'dan:** canlıdaki `update-parent` e-posta değişikliği hatası yetim veli
+  hesapları bırakmış olabilir (davetli, onaysız, bağlı; eski hesap da duruyor).
+  Taşımadan önce salt okunur sayılmalı (bkz. PROGRESS.md açık sorular).
+
 ## Yapılacaklar
 - **S03'ten bilinmesi gerekenler:**
   - `roles`, `role_permissions` ve `app_min_versions` `0004_reference_data.sql`

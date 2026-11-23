@@ -42,6 +42,7 @@ import { AccessTokenIssuer } from './token/tokens';
   ],
   exports: [
     JwtVerifier,
+    AuthService,
     RequestAuthGuard,
     PasswordHasher,
     AccessTokenIssuer,

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
+import { AccountsModule } from './accounts/accounts.module';
 import { AuthModule } from './auth/auth.module';
 import { AllExceptionsFilter } from './common/errors/all-exceptions.filter';
 import { buildLoggerParams } from './common/logging/logging.options';
@@ -33,6 +34,7 @@ import { StorageModule } from './storage/storage.module';
     HealthModule,
     RpcModule,
     StorageModule,
+    AccountsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
