@@ -81,7 +81,9 @@ db/
   compat/            sources of the compatibility layer, kept readable (00–03 before the dump, 04–05 after)
 docker/postgres/     Postgres 17 image (pg_cron preloaded, cron.database_name=postgres, ICU en-US, UTC)
 docker-compose.yml   local db (+ optional api profile); Dockerfile = API image
-scripts/             build-baseline.mjs, import-migration.mjs, schema-fingerprint.sql; later data export/import, backup
+scripts/             build-baseline.mjs, import-migration.mjs, schema-fingerprint.sql, docker-entrypoint.sh (S16),
+  backup/            S16: backup.sh (restic), restore-db.sh + roles.sql, restore-test.sh, backup.env.example
+ops/systemd/         S16: mso-backup / mso-restore-test service + timer (VPS host)
 dumps/               (gitignored) `supabase db dump` output — never committed
 test/                e2e + integration (Testcontainers, real Postgres)
   support/           database.ts (build image, start, dbmate up, seed), docker-env.ts, fake-mail.ts (FakeMailbox),
@@ -89,6 +91,7 @@ test/                e2e + integration (Testcontainers, real Postgres)
                      fake-fcm.ts (FakeFcm: `fcmOf(app)`), ws-client.ts (TestWs, realtime client)
   fixtures/          seed.sql (made-up data: two schools, two brands, every role) + seed-ids.ts
 docs/migration/      plan, progress log, session files
+docs/ops/            S16: deploy.md (Coolify, env, update, rollback), server-setup.md, backup.md (backup, restore, monitoring)
 docs/api/            API contracts the apps are rewritten against (auth.md, storage.md, functions.md, realtime.md)
 ```
 
@@ -380,6 +383,32 @@ npm run db:migrate && npm run test:e2e
 - Import: cron paused, `session_replication_role = replica`, one
   transaction, sequences reset; verify compares fingerprints, FKs,
   sequences and files. `test/data-migration.e2e-spec.ts` is the rehearsal.
+
+## Production (S16)
+
+`docs/ops/deploy.md` is the runbook. Things code changes must respect:
+
+- **The image migrates on start.** `scripts/docker-entrypoint.sh` (under
+  tini) runs `dbmate up`, writes `api_authenticator`'s password from
+  `API_DATABASE_URL`, then starts the API; `MIGRATE_ON_START=0` skips both.
+  `dbmate` is therefore a runtime `dependency` and `db/migrations` is in the
+  image. A migration runs while the old container still serves traffic:
+  never break the previous release in one step (drop/rename in two deploys).
+- **One replica.** Rate-limit counters, realtime sockets and the push sweep
+  live in process memory.
+- **Security headers come from the API** (`SECURITY_HEADERS` in
+  `app.setup.ts`), not the proxy; no `Cross-Origin-Resource-Policy` (logos
+  are `<img>` in e-mails).
+- **Backups restore into an empty cluster** of the project's image via
+  `scripts/backup/restore-db.sh`; cluster roles are not in a dump and come
+  from `scripts/backup/roles.sql`. **A migration that creates a role adds
+  it there too** — `test/backup-restore.e2e-spec.ts` compares roles and
+  fails otherwise.
+- Postgres tuning is `ALTER SYSTEM` (`docker/postgres/tuning.sql`); Coolify's
+  custom-config field would replace the image's `postgresql.conf` and drop
+  pg_cron.
+- The API domain (`api.mobilsporokulu.com`) is written in both apps'
+  `config/*.json`, the site's `site.ts` and `.htaccess` CSP — change together.
 
 ## Docker on this Mac (colima)
 

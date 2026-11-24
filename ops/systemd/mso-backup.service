@@ -1,0 +1,13 @@
+# /etc/systemd/system/mso-backup.service  (docs/ops/backup.md)
+[Unit]
+Description=Mobil Spor Okulu gece yedeği (veritabanı + dosya deposu, restic)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/mso/scripts/backup/backup.sh
+Nice=10
+IOSchedulingClass=idle
+# Yedek uzun sürebilir; bir gecede biter.
+TimeoutStartSec=4h

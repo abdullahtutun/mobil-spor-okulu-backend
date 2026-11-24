@@ -5,6 +5,7 @@ import { DB_POOL } from '../src/db/db.tokens';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { SECURITY_HEADERS } from '../src/app.setup';
 import { createTestApp } from './support/app';
 import { startTestDatabase, type TestDatabase } from './support/database';
 
@@ -93,6 +94,31 @@ describe('Sağlık uçları (gerçek Postgres)', () => {
       expect(rows.map((r) => r.version)).toContain('0000');
     } finally {
       await client.end();
+    }
+  });
+});
+
+describe('Güvenlik başlıkları (S16)', () => {
+  let db: TestDatabase;
+  let app: INestApplication<App>;
+
+  beforeAll(async () => {
+    db = await startTestDatabase();
+    app = await createTestApp(db);
+  });
+
+  afterAll(async () => {
+    await app?.close();
+    await db?.stop();
+  });
+
+  it('her yanıtta var, x-powered-by yok', async () => {
+    for (const path of ['/health', '/yok']) {
+      const res = await request(app.getHttpServer()).get(path);
+      for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+        expect(res.headers[name.toLowerCase()]).toBe(value);
+      }
+      expect(res.headers['x-powered-by']).toBeUndefined();
     }
   });
 });

@@ -1,0 +1,11 @@
+# /etc/systemd/system/mso-restore-test.service  (docs/ops/backup.md)
+[Unit]
+Description=Mobil Spor Okulu aylık geri yükleme testi
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/mso/scripts/backup/restore-test.sh
+Nice=10
+TimeoutStartSec=2h

@@ -73,7 +73,7 @@ Her oturum yeni bir Claude Code oturumunda `/oturum Sxx` ile çalıştırılır
 | [S13](sessions/S13-veli-uygulamasi.md) | Veli uygulamasının yeni backend'e geçişi | S05–S08, S11 | V |
 | [S14](sessions/S14-yonetim-cekirdek.md) | Yönetim uygulaması: istemci, auth, RPC | S05, S06 | Y |
 | [S15](sessions/S15-yonetim-kalan.md) | Yönetim uygulaması: okumalar, storage, fonksiyonlar, realtime, web, site | S07–S11, S14 | Y, S |
-| [S16](sessions/S16-uretim-dagitimi.md) | VPS, Caddy, yedekleme, izleme, sertleştirme | S01 | backend |
+| [S16](sessions/S16-uretim-dagitimi.md) | VPS + Coolify, yedekleme, izleme, sertleştirme | S01 | backend |
 | [S17](sessions/S17-gecis.md) | Geçiş provası ve canlıya geçiş | hepsi | hepsi |
 
 Önerilen sıra: **S01 → S02 → S03 → S04 → S05 → S06 → S07 → S08 → S09 → S10 →

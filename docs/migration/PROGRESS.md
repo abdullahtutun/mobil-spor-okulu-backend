@@ -23,7 +23,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S13 | tamam | 2026-11-23 | Veli `migrate/own-backend`: `supabase_flutter` yerine `AuthSession` + `ApiClient` + `RealtimeClient`; 178 test, yerel backend + seed'e karşı uçtan uca veri kaynağı testi |
 | S14 | tamam | 2026-11-23 | Yönetim `migrate/own-backend`: auth akışları `AuthSession`'da, bütün `.rpc(` `ApiClient.rpc`'de; `.from`/storage/functions/realtime S15'e kadar Supabase istemcisinde (dal arada kullanılamaz); 1219 test + yerel backend'e karşı gerçek e-posta koduyla uçtan uca |
 | S15 | kısmen | 2026-11-23 | Yönetim `migrate/own-backend`: `supabase_flutter` çıktı (okumalar, storage, functions, realtime backend'de, yerel türler); site formu `/functions/site-lead`'e; 1235 test + iki e2e koşusu. Kalan: aydınlatma metni (kullanıcı kararı) |
-| S16 | bekliyor | | |
+| S16 | kısmen | 2026-11-24 | Repo tarafı: girişte migration + parola (tini), güvenlik başlıkları, restic yedek/geri yükleme/aylık test + systemd, restore e2e, `docs/ops/{deploy,server-setup,backup}.md`. Kalan: sunucu/DNS/S3/sırlar kullanıcıda |
 | S17 | bekliyor | | |
 
 ## Açık sorular
@@ -31,17 +31,25 @@ oturum dosyasında işaretli) · `tamam`.
 Kullanıcıya sorulacak ya da ilgili oturumda karara bağlanacak konular.
 Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
 
-- API alan adı: `api.mobilsporokulu.com` mu, marka başına ayrı mı? (S16)
-- VPS'in boyutu ve Coolify'da çalışan diğer servisler (RAM bütçesi). (S16)
-- Yedeklerin gideceği ikinci yurt içi S3 uyumlu depolama. (S16)
-
+- **S16 (kullanıcıya soruldu 2026-11-24, `docs/ops/deploy.md`):**
+  VPS sağlayıcısı/şehri/boyutu ve üzerindeki diğer servisler; API alan adı
+  (öneri `api.mobilsporokulu.com`, uygulamalar ve site bunu yazıyor) ve
+  DNS'in kimde olduğu; Coolify paneli alan adı; repo'nun Coolify'a erişimi
+  (şu an git remote yok); ikinci lokasyon S3 (sağlayıcı/şehir) ve saklama
+  (7 gün/4 hafta/6 ay); izleme aracı ve bildirim kanalı; prova verisi
+  provadan sonra silinsin mi; 5651 kararı (aşağıda).
+- **5651 / `auth.audit_log_entries`** (S05/S12/S16): yeni backend giriş
+  olaylarını tabloya yazmıyor, eski kayıtlar taşınmıyor; gizlilik politikası
+  §9 erişim kayıtlarını 1–2 yıl saklıyor. Karar kullanıcıda (öneri: eski
+  kayıtlar export'la şifreli arşiv, yeni backend'de giriş olayları için
+  küçük bir tablo + 1 yıl saklama — S17'den önce ayrı küçük iş).
 - S02: 1.1.2+10 mağazaya ne zaman çıkacak? (kullanıcıda)
 - S02: iOS App Store adresleri (`app_min_versions.store_url`) S17'den önce
   yazılmalı.
 - S11: send-push `data` sızıntısı yönetim reposunda düzeltildi
   (`send-push/data_params.ts`, kullanıcı onayıyla); dağıtım kullanıcıda:
   `supabase functions deploy send-push --no-verify-jwt`.
-- S16: `FCM_SERVICE_ACCOUNT` (Supabase secrets'taki değer) kullanıcıdan.
+- S16: Coolify'a girilecek sırlar kullanıcıdan: `FCM_SERVICE_ACCOUNT`, `IP_HASH_SALT`, `SITE_LEAD_NOTIFY_TO`, iki markanın SMTP kutusu (Supabase secrets'taki değerler; `deploy.md` §5).
 - S15: **aydınlatma metni** — gizlilik politikası (`assets/legal/privacy_policy_tr.md`,
   hizmet sağlayıcılar tablosundaki "Supabase Pte. Ltd. … İsviçre (Zürih)"
   satırı ve yurt dışı aktarım anlatımı; veli uygulamasında birebir kopyası),
@@ -57,6 +65,48 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S16 — Üretim dağıtımı, yedekleme, izleme (2026-11-24)
+- Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/ops/`'a bakın.
+  Orkestratörle, kullanıcıya sorulmadan çalıştırıldı; repo'da yapılabilen
+  her şey yapıldı, sunucuya/DNS'e/S3'e dokunulmadı, canlı Supabase'e hiçbir
+  sorgu atılmadı. Plan kararı (K1–K16) değişmedi. Durum **kısmen**: üç
+  kabul kriteri de sunucuda doğrulanacak.
+- Kendi verdiğim kararlar:
+  - **Migration açılışta** (pre-deploy değil): Coolify'ın pre-deployment
+    komutu çalışan eski konteynerde koşar, yeni migration dosyaları orada
+    yok. Tek replika; bir adım düşerse yeni konteyner sağlıksız kalır ve
+    Coolify eskisini bırakır. Aynı yerde `api_authenticator` parolası
+    yazılır (geri yüklenen yedekte rol parolası yok).
+  - **`dbmate` `dependencies`'e** taşındı (imajda migration için).
+  - **tini** (Coolify `--init` vermiyor); kapanış 0,3 sn, SIGTERM Nest'e
+    ulaşıyor.
+  - **Güvenlik başlıkları API'de** (vekil label'ı yerine): Coolify'a özgü
+    yapılandırma olmadan testlenebilir; CORP yok (logolar e-postada).
+  - **İki yedek**: Coolify'ın DB yedeği (panel) + restic (DB'nin ikinci
+    kopyası ve Coolify'ın almadığı storage volume'u), aynı S3'te ayrı
+    önek, restic istemci tarafında şifreli. Geri yükleme hedefi daima boş,
+    projenin imajından bir küme.
+  - **`roles.sql` ayrı dosya**: rolleri `00_roles.sql` + 0005'ten toplar;
+    e2e roller dahil karşılaştırdığı için kayma testte düşer.
+  - **Bellek ayarı `ALTER SYSTEM`** ile (`tuning.sql`): Coolify'ın özel
+    config alanı pg_cron preload'unu ezer.
+  - **Bellekteki hız sınırları kabul** (tek replika, dağıtımda sıfırlanır);
+    ikinci replikada ne taşınacağı `deploy.md`'de.
+  - **DNS vekilsiz** önerisi (Cloudflare turuncu bulut TLS'i yurt dışında
+    açar; aydınlatma metnini de değiştirir, `TRUST_PROXY` 2 olur).
+- Kabul (repo): lint, typecheck, `npm test` 181, `npm run test:e2e` 689
+  (yeni: geri yükleme + güvenlik başlıkları); imaj yerelde build + boş
+  DB'de açılış; restic betikleri yerelde bir kez.
+- Sonraki oturumlar için:
+  - S16'nın kalanı: kullanıcı cevaplarıyla sunucuda `deploy.md` →
+    `server-setup.md` → `backup.md`; kabul komutları `deploy.md` §6 ve
+    `server-setup.md` §8. Sonuçlar bu günlüğe.
+  - S15'in kalanı (aydınlatma metni): S16 sorularının cevaplarına bağlı
+    (sağlayıcı unvanı/şehri, yedek yeri, kalan yurt dışı hizmetler, tarih).
+  - S17: şema boş üretim veritabanına API'nin ilk açılışında gelir
+    (girişteki dbmate); import'tan önce API durdurulur. `MIGRATE_ON_START=0`
+    API'yi migration'sız açmak gerekirse hazır. Yeni bir migration rol eklerse `scripts/backup/roles.sql`'e de.
 
 ### S15 — Yönetim uygulaması: okumalar, storage, fonksiyonlar, realtime, site (2026-11-23)
 - Yapılanlar: oturum dosyasındaki teslim notuna bakın. Orkestratörle,

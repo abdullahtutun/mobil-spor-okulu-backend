@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import type { Request } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { rawTextBody } from './common/http/raw-text-body';
 import type { AppConfig } from './config/env.schema';
 
@@ -27,6 +27,7 @@ export function configureApp(
   // hız sınırı IP başına olduğu için bu sayı doğru olmalı (S16).
   app.set('trust proxy', config.TRUST_PROXY);
   app.disable('x-powered-by');
+  app.use(securityHeaders);
 
   // JSON ayrıştırıcısından ÖNCE: bu yollar gövdeyi metin olarak alır.
   const bodyLimit = parseByteSize(config.BODY_LIMIT);
@@ -70,6 +71,32 @@ export function configureApp(
       maxAge: 600,
     });
   });
+}
+
+/**
+ * Her yanıta eklenen güvenlik başlıkları (S16). API JSON ve dosya döndürür;
+ * HTML sunmaz. `Cross-Origin-Resource-Policy` bilerek yok: okul logoları
+ * e-postalarda ve web paketlerinde başka kökenden `<img>` ile açılır. HSTS
+ * yalnızca HTTPS üzerinden gelen istekte anlamlıdır, tarayıcı HTTP'de yok
+ * sayar; Coolify'ın vekili TLS'i sonlandırdığı için burada konur.
+ */
+export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Strict-Transport-Security': 'max-age=31536000',
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+};
+
+function securityHeaders(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    res.setHeader(name, value);
+  }
+  next();
 }
 
 /** body-parser biçimindeki boyut (`1mb`, `512kb`, `100b`) → bayt. */

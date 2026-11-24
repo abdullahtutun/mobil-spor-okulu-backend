@@ -1,0 +1,10 @@
+# /etc/systemd/system/mso-restore-test.timer — ayın ilk pazarı 05:00 TR
+[Unit]
+Description=Mobil Spor Okulu aylık geri yükleme testi
+
+[Timer]
+OnCalendar=Sun *-*-01..07 02:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

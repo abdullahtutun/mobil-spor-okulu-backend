@@ -12,7 +12,7 @@ import { GenericContainer } from 'testcontainers';
 const execFileAsync = promisify(execFile);
 
 const ROOT = join(__dirname, '..', '..');
-const IMAGE = 'mobil-spor-okulu-postgres:test';
+export const IMAGE = 'mobil-spor-okulu-postgres:test';
 
 export interface TestDatabase {
   container: StartedPostgreSqlContainer;
@@ -30,7 +30,7 @@ let imageBuilt: Promise<void> | undefined;
  * build eder. Docker katman önbelleği sayesinde ikinci seferden sonra
  * saniyeler sürer; aynı süreçte yalnızca bir kez çağrılır.
  */
-function buildImage(): Promise<void> {
+export function buildImage(): Promise<void> {
   imageBuilt ??= GenericContainer.fromDockerfile(
     join(ROOT, 'docker', 'postgres'),
   )
@@ -72,7 +72,7 @@ export async function seed(url: string): Promise<void> {
 export const TEST_API_PASSWORD = 'api-test-parolasi';
 
 /** `npm run db:api-password`'ün yaptığı: rol parolasız gelir (S03). */
-async function setApiPassword(url: string): Promise<void> {
+export async function setApiPassword(url: string): Promise<void> {
   const client = new Client({ connectionString: url });
   await client.connect();
   try {

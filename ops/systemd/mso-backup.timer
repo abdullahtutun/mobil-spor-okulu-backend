@@ -1,0 +1,13 @@
+# /etc/systemd/system/mso-backup.timer
+# 03:30 Türkiye saati (00:30 UTC), trafiğin en az olduğu saat. Coolify'ın
+# DB yedeğini 02:00 TR'ye (23:00 UTC) koyun ki ikisi çakışmasın.
+[Unit]
+Description=Mobil Spor Okulu gece yedeği
+
+[Timer]
+OnCalendar=*-*-* 00:30:00 UTC
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
