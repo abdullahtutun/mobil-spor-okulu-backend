@@ -41,9 +41,19 @@ docker build -t mobil-spor-okulu-postgres:17 docker/postgres
 ```
 
 `/opt/mso` aynı zamanda yedek betiklerinin yeri (`backup.md`).
-İmaj yerel kaldığı için Coolify onu çekmeye çalışmaz; çekmeye kalkarsa
-(hata: `pull access denied`) imajı bir registry'ye (GHCR, özel) koyup adı
-oradan verin.
+
+Coolify'ın Database kaynağı imajı **her açılışta registry'den çeker**; yerel
+imajı kullanmaz (`pull access denied`). İmaj GHCR'a konur ve paket **Public**
+yapılır (içinde sır yok: postgres + pg_cron):
+
+```bash
+# klasik token, yalnızca write:packages
+echo '<ghp_…>' | docker login ghcr.io -u <kullanıcı> --password-stdin
+docker tag mobil-spor-okulu-postgres:17 ghcr.io/<kullanıcı>/mobil-spor-okulu-postgres:17
+docker push ghcr.io/<kullanıcı>/mobil-spor-okulu-postgres:17
+docker logout ghcr.io
+# GitHub → Packages → mobil-spor-okulu-postgres → Package settings → Change visibility → Public
+```
 
 ## 3. Veritabanı kaynağı
 
@@ -51,7 +61,7 @@ Coolify → `production` → **+ New** → Databases → **PostgreSQL**:
 
 | Ayar | Değer |
 |---|---|
-| Image | `mobil-spor-okulu-postgres:17` |
+| Image | `ghcr.io/<kullanıcı>/mobil-spor-okulu-postgres:17` |
 | Username / Database | `postgres` / `postgres` (pg_cron yalnızca `postgres`'te çalışır) |
 | Password | uzun rastgele (`openssl rand -base64 32`), parola yöneticisine |
 | Make it publicly available | **kapalı** (dışarı port yok) |
@@ -61,11 +71,11 @@ Coolify → `production` → **+ New** → Databases → **PostgreSQL**:
 İlk açılıştan sonra:
 
 ```bash
-docker ps --format '{{.Names}}' | grep -i postgres      # <db> adı
+DB=$(docker ps --format '{{.Names}} {{.Image}}' | awk '/mobil-spor-okulu-postgres/{print $1}')   # <db> = $DB
 docker exec <db> psql -U postgres -Atc "show shared_preload_libraries"   # pg_cron
 docker exec -i <db> psql -U postgres -d postgres < /opt/mso/docker/postgres/tuning.sql
 # Coolify → Database → Restart; değerler VPS RAM'ine göre (dosyanın başı)
-docker exec <db> psql -U postgres -Atc "select datlocprovider, daticulocale from pg_database where datname='postgres'"   # i | en-US
+docker exec <db> psql -U postgres -Atc "select datlocprovider, datlocale from pg_database where datname='postgres'"   # i | en-US
 ```
 
 Coolify'daki **"Postgres URL (internal)"** adresi `DATABASE_URL`'in
