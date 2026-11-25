@@ -66,7 +66,7 @@ Coolify → `production` → **+ New** → Databases → **PostgreSQL**:
 | Password | uzun rastgele (`openssl rand -base64 32`), parola yöneticisine |
 | Make it publicly available | **kapalı** (dışarı port yok) |
 | Custom PostgreSQL Configuration | **boş** (doluysa pg_cron yüklenmez) |
-| Backups | Scheduled: `0 23 * * *` (02:00 TR), S3: `backup.md` §1, saklama 7 |
+| Backups | Scheduled: `0 2 * * *`, Timezone `Europe/Istanbul`; yerel saklama 7 kopya / 7 gün / 5 GB; S3: `backup.md` §1 |
 
 İlk açılıştan sonra:
 
@@ -92,12 +92,13 @@ key) → repo, dal `main`:
 | Base Directory / Dockerfile Location | `/` / `/Dockerfile` |
 | Ports Exposes | `3000` |
 | Domains | `https://api.mobilsporokulu.com` |
-| Health Check | açık, path **`/health`** (DB'yi de sorar), port 3000, interval 15 s, start period 60 s |
+| Health Check | **kapalı** (Coolify'ınki konteynerde curl/wget arar, imajda yok); Dockerfile'daki `HEALTHCHECK` (node, `/health/live`) kullanılır. Dış izleme `/health` (backup.md §4) |
 | Persistent Storage | Volume, ad `mso-storage`, hedef **`/data/storage`** |
 | Replicas | **1** (hız sınırları ve realtime tek süreçte; aşağıda) |
 | Pre/Post-deployment command | boş (migration açılışta, aşağıda) |
 | Custom Docker options | boş (tini imajda) |
 | Automatic deploy (webhook) | isteğe bağlı; önerilen: **elle** (geçiş döneminde) |
+| Environment Variables | hepsinde **Build time kapalı** (`NODE_ENV=production` build'de devDependencies'i atlar, `nest build` düşer), Interpolation literal |
 
 Traefik varsayılanları yeterli; ek label gerekmez:
 
