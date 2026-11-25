@@ -4,11 +4,12 @@
 # /etc/mso-backup.env'den (scripts/backup/backup.env.example).
 #
 #   1. Veritabanı: Postgres konteynerinde pg_dump -Fc → restic (stdin).
-#      Coolify'ın kendi planlı yedeği de S3'e gider; bu ikinci kopya aynı
-#      restic deposunda, aynı saklama politikasıyla durur.
+#      Coolify'ın kendi planlı yedeği (yerel, 7 kopya) ayrıca durur; bu
+#      ikinci kopya restic deposunda, dosyalarla aynı saklama politikasıyla.
 #   2. Dosya deposu: API'nin STORAGE_ROOT volume'u (çocuk fotoğrafları,
 #      logolar). Coolify bunu YEDEKLEMEZ.
-#   3. Saklama: 7 günlük, 4 haftalık, 6 aylık (restic forget --prune).
+#   3. Saklama: son 30 gün (restic forget --keep-within 30d --prune); hiçbir
+#      yedek ~30 günden eski değildir (gizlilik metni §9 "en fazla 30 gün").
 #   4. Sonuç: BACKUP_PING_URL'e başarı, hata olursa /fail (Uptime Kuma push
 #      ya da healthchecks.io). Ping gelmezse izleme uyarır.
 #
@@ -23,9 +24,8 @@ ENV_FILE="${MSO_BACKUP_ENV:-/etc/mso-backup.env}"
 : "${RESTIC_REPOSITORY:?}" "${RESTIC_PASSWORD:?}"
 : "${DB_CONTAINER:?Postgres konteynerinin adı (docker ps)}"
 : "${STORAGE_PATH:?STORAGE_ROOT volume yolu (sunucuda)}"
-KEEP_DAILY="${KEEP_DAILY:-7}"
-KEEP_WEEKLY="${KEEP_WEEKLY:-4}"
-KEEP_MONTHLY="${KEEP_MONTHLY:-6}"
+# restic süre biçimi (30d, 2w…). Eski KEEP_DAILY/WEEKLY/MONTHLY yok sayılır.
+KEEP_WITHIN="${KEEP_WITHIN:-30d}"
 HOST_TAG="${HOST_TAG:-mso-prod}"
 
 ping_result() {
@@ -50,8 +50,7 @@ restic backup --host "$HOST_TAG" --tag storage "$STORAGE_PATH"
 
 echo "== saklama"
 restic forget --host "$HOST_TAG" --group-by host,tags \
-  --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" \
-  --keep-monthly "$KEEP_MONTHLY" --prune
+  --keep-within "$KEEP_WITHIN" --prune
 
 # Haftada bir (pazar) verinin bir kısmını okuyarak depoyu denetle.
 if [ "$(date +%u)" = "7" ]; then

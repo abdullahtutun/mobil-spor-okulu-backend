@@ -1,40 +1,48 @@
 # Yedekleme, geri yükleme ve izleme
 
-İki kopya, iki araç:
+Bugünkü durum (2026-11-25): iki kopya, ikisi de **aynı VPS'te**
+(hosting.com.tr, 77.245.147.124). Sunucu kaybını karşılamaz; ikinci
+lokasyon (yurt içi S3) sonraki iyileştirme (§6).
 
 | Ne | Araç | Nereye | Ne zaman | Saklama |
 |---|---|---|---|---|
-| Veritabanı (`pg_dump -Fc`) | Coolify planlı yedek | S3 (ikinci lokasyon) | 02:00 TR | 7 kopya (Coolify) |
-| Veritabanı + **dosya deposu** | `scripts/backup/backup.sh` (restic, şifreli) | aynı S3, ayrı önek `mso/` | 03:30 TR | 7 gün / 4 hafta / 6 ay |
+| Veritabanı (`pg_dump -Fc`) | Coolify planlı yedek | Coolify yerel yedek dizini | 02:00 TR | 7 kopya |
+| Veritabanı + **dosya deposu** | `scripts/backup/backup.sh` (restic, şifreli), `mso-backup.timer` | `/var/backups/mso-restic` | 03:30 TR | son 30 gün (`--keep-within 30d`) |
 
 Coolify dosya volume'unu (`/data/storage`: çocuk fotoğrafları, okul
 logoları) **yedeklemez**; restic onu ve ikinci bir DB kopyasını alır.
-Restic deposu istemci tarafında şifrelidir: S3 sağlayıcısı içeriği göremez.
+Restic deposu şifrelidir (`RESTIC_PASSWORD`, parola yöneticisinde de).
 
-## 1. Kurulum (bir kez, VPS'te root)
+**Saklama 30 gün, gizlilik metniyle aynı.** Yönetim uygulamasının
+`assets/legal/privacy_policy_tr.md` §9'u "en fazla 30 gün" der; ikisi
+birlikte değişir. `KEEP_WITHIN` (varsayılan `30d`) en yeni yedekten 30 günden
+eski her snapshot'ı siler; Coolify'ın 7 kopyası zaten içinde kalır. Eski
+`KEEP_DAILY/WEEKLY/MONTHLY` değişkenleri artık okunmaz.
 
-1. S3 uyumlu depoda (yurt içi, VPS'ten farklı lokasyon) bir bucket ve
-   yalnızca o bucket'a yazabilen bir erişim anahtarı açın.
-2. Coolify → Settings → **S3 Storages** → ekle (endpoint, bucket, anahtar)
-   → "Test connection". Database → Backups → bu S3'ü seçin (deploy.md §3).
-3. Restic ve betikler:
+**Önbellek:** systemd `HOME` vermez; `RESTIC_CACHE_DIR=/root/.cache/restic`
+env dosyasında olmalı, yoksa restic her çalıştırmada uyarır ve depoyu baştan
+okur.
 
-   ```bash
-   apt-get install -y restic curl && restic self-update
-   # /opt/mso: repo kopyası (deploy.md §2)
-   install -m 600 /opt/mso/scripts/backup/backup.env.example /etc/mso-backup.env
-   nano /etc/mso-backup.env        # RESTIC_*, AWS_*, DB_CONTAINER, STORAGE_PATH, ping adresleri
-   openssl rand -base64 32         # RESTIC_PASSWORD — parola yöneticisine DE yazın
-   docker volume ls | grep storage # STORAGE_PATH: docker volume inspect <ad> --format '{{.Mountpoint}}'
-   cp /opt/mso/ops/systemd/mso-*.{service,timer} /etc/systemd/system/
-   systemctl daemon-reload
-   systemctl enable --now mso-backup.timer mso-restore-test.timer
-   systemctl start mso-backup.service && journalctl -u mso-backup -n 30
-   restic snapshots                 # env'i yükleyip: set -a; . /etc/mso-backup.env; set +a
-   ```
+## 1. Kurulum (bir kez, VPS'te root — S16'da yapıldı)
 
-   `DB_CONTAINER` Coolify'ın verdiği addır; Coolify veritabanını yeniden
-   oluşturursa (ör. imaj değişince) adı aynı kalır, ama kontrol edin.
+```bash
+apt-get install -y restic curl && restic self-update
+# /opt/mso: repo kopyası (deploy.md §2)
+install -m 600 /opt/mso/scripts/backup/backup.env.example /etc/mso-backup.env
+nano /etc/mso-backup.env        # RESTIC_PASSWORD, DB_CONTAINER, STORAGE_PATH, PG_IMAGE, ping adresleri
+openssl rand -base64 32         # RESTIC_PASSWORD — parola yöneticisine DE yazın
+docker volume ls | grep storage # STORAGE_PATH: docker volume inspect <ad> --format '{{.Mountpoint}}'
+cp /opt/mso/ops/systemd/mso-*.{service,timer} /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now mso-backup.timer mso-restore-test.timer
+systemctl start mso-backup.service && journalctl -u mso-backup -n 30
+set -a; . /etc/mso-backup.env; set +a; restic snapshots
+```
+
+Üretimde `DB_CONTAINER=tyinwtkkazvfwgtpwru3xgcd`,
+`PG_IMAGE=ghcr.io/abdullahtutun/mobil-spor-okulu-postgres:17`. Coolify
+veritabanını yeniden oluşturursa adı aynı kalır, ama kontrol edin. Coolify
+yedeği: Database → Backups → yerel, 02:00, 7 kopya.
 
 ## 2. Geri yükleme
 
@@ -119,3 +127,12 @@ durumunda ping gitmez ve monitör zamanında uyarır, bu da yeterli.
 - 5651 erişim kayıtları: veritabanında `auth.access_log` (0010), 1 yıl
   (`backend_access_log_purge`); yedeklerle birlikte gider. Okuma yalnızca
   `postgres` ile (`psql`), adli talepte.
+
+## 6. Sonraki iyileştirme: ikinci lokasyon
+
+Yurt içi, VPS'ten farklı lokasyonda S3 uyumlu bir bucket ve yalnızca ona
+yazabilen anahtar açılınca: Coolify → Settings → S3 Storages → ekle → Database
+→ Backups'ta seçin; restic için `RESTIC_REPOSITORY=s3:https://<uç>/<bucket>/mso`
+ve `AWS_*` (yeni depo `restic init` ile açılır; eski yerel depo 30 gün sonra
+silinebilir). Saklama aynı kalır (30 gün).
+
