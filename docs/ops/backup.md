@@ -116,4 +116,6 @@ durumunda ping gitmez ve monitör zamanında uyarır, bu da yeterli.
   loglanmaz (AGENTS.md).
 - Postgres: 500 ms'den uzun sorgular (`tuning.sql`), parametresiz.
 - Yedek/test: `journalctl -u mso-backup`, `-u mso-restore-test`.
-- 5651 erişim kayıtları: açık soru (PROGRESS.md) — karara göre ayrı saklama.
+- 5651 erişim kayıtları: veritabanında `auth.access_log` (0010), 1 yıl
+  (`backend_access_log_purge`); yedeklerle birlikte gider. Okuma yalnızca
+  `postgres` ile (`psql`), adli talepte.

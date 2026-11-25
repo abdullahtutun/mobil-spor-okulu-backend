@@ -929,8 +929,11 @@ describe('Bildirimler: realtime, push, cron (gerçek Postgres)', () => {
   // ============================================================== cron
 
   describe('cron', () => {
+    // Sıra jobname'e göre (ICU en-US: `_` harflerden önce).
     const JOBS = [
       ['athletes_sensitive_data_purge', '35 0 * * *'],
+      // 0010: 5651 erişim kaydı saklaması (yalnızca yeni backend'de).
+      ['backend_access_log_purge', '15 1 * * *'],
       ['expire_trials_job', '0 3 * * *'],
       ['notifications_attendance_reminder', '*/15 * * * *'],
       ['notifications_birthday_upcoming', '0 6 * * *'],
@@ -941,7 +944,7 @@ describe('Bildirimler: realtime, push, cron (gerçek Postgres)', () => {
       ['site_leads_retention_purge', '45 0 * * *'],
     ];
 
-    it('dokuz iş kurulu, etkin, postgres veritabanında', async () => {
+    it('on iş kurulu (canlının dokuzu + backend_access_log_purge), etkin, postgres veritabanında', async () => {
       const { rows } = await pg.query<{
         jobname: string;
         schedule: string;

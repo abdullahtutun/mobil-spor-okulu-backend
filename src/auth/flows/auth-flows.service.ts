@@ -268,7 +268,7 @@ export class AuthFlowsService {
       await this.flows.clearToken(c, user.id, kind);
       await this.flows.confirmEmail(c, user.id);
       const fresh = (await this.repo.findUserById(c, user.id)) as UserRow;
-      return this.sessions.open(c, fresh, client);
+      return this.sessions.open(c, fresh, client, 'otp');
     });
   }
 
@@ -296,7 +296,7 @@ export class AuthFlowsService {
       await this.flows.clearToken(c, user.id, 'confirmation_token');
       await this.flows.confirmEmail(c, user.id);
       const fresh = (await this.repo.findUserById(c, user.id)) as UserRow;
-      return this.sessions.open(c, fresh, client);
+      return this.sessions.open(c, fresh, client, 'invite');
     });
   }
 

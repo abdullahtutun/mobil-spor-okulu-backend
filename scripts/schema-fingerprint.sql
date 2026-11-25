@@ -15,6 +15,9 @@
 --                            trigger fonksiyonu, 0009); canlıda yoklar
 --   adı `backend_` ile başlayan trigger'lar
 --                            yalnızca yeni backend'de (S11, 0009)
+--   adı `backend_` ile başlayan cron işleri
+--                            yalnızca yeni backend'de (5651 erişim kaydının
+--                            saklaması, 0010)
 --
 -- Henüz canlıya uygulanmamış bir migration taşındıysa (AGENTS.md → "Schema
 -- sync") onun nesneleri geçici olarak aşağıdaki `not in (...)` listelerine
@@ -75,4 +78,5 @@ select 'spol', md5(string_agg(
 union all
 select 'cron', md5(string_agg(jobname || schedule || command, '|' order by jobname))
   from cron.job
+ where jobname not like 'backend\_%'
 order by 1;

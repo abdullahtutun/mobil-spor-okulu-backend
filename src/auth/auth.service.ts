@@ -96,6 +96,7 @@ export class AuthService {
     // Yasaklı / silinmiş hesap, doğru şifreyle bile, yanlış şifreyle aynı.
     if (!user || !passwordOk || isLockedOut(user)) {
       this.limiter.recordFailure(ipKey, email);
+      await this.logFailedSignIn(user?.id ?? null, client);
       throw invalidCredentials();
     }
     this.limiter.recordSuccess(ipKey, email);
@@ -110,7 +111,35 @@ export class AuthService {
       );
     }
 
-    return this.db.asAuthService((c) => this.sessions.open(c, user, client));
+    return this.db.asAuthService((c) =>
+      this.sessions.open(c, user, client, 'password'),
+    );
+  }
+
+  /**
+   * Başarısız parola girişinin 5651 kaydı. Bilinmeyen e-postada kullanıcı
+   * null (e-posta yazılmaz). Kayıt düşerse giriş yanıtı değişmez: yanlış
+   * şifreye "sunucu hatası" denmez, yalnızca loglanır.
+   */
+  private async logFailedSignIn(
+    userId: string | null,
+    client: ClientInfo,
+  ): Promise<void> {
+    try {
+      await this.db.asAuthService((c) =>
+        this.repo.insertAccessLog(c, {
+          event: 'password_failed',
+          userId,
+          sessionId: null,
+          client,
+        }),
+      );
+    } catch (error) {
+      this.logger.error(
+        { err: error },
+        'Başarısız giriş erişim kaydına yazılamadı',
+      );
+    }
   }
 
   /**
@@ -227,6 +256,12 @@ export class AuthService {
         parent: parentHash,
       });
       await this.repo.touchSession(c, session.id, client);
+      await this.repo.insertAccessLog(c, {
+        event: 'refresh',
+        userId: user.id,
+        sessionId: session.id,
+        client,
+      });
       return this.sessions.respond(c, user, session, next.token);
     });
     // Reddi transaction'ın içinden fırlatmak yapılanı (oturumun silinmesini)

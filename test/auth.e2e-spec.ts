@@ -685,4 +685,159 @@ describe('Auth (gerçek Postgres)', () => {
       await attempt('10.4.0.2', 'diyetisyen@a.test', SEED_PASSWORD).expect(200);
     });
   });
+
+  describe('5651 erişim kaydı (auth.access_log, 0010)', () => {
+    let proxied: INestApplication<App>;
+
+    beforeAll(async () => {
+      proxied = await createTestApp(db, { TRUST_PROXY: '1' });
+    });
+    afterAll(async () => {
+      await proxied?.close();
+    });
+
+    const tokenCall = (ip: string, grant: string, body: object) =>
+      request(proxied.getHttpServer())
+        .post(`/auth/token?grant_type=${grant}`)
+        .set('X-Forwarded-For', ip)
+        .set('User-Agent', 'e2e-5651/1.0')
+        .send(body);
+
+    async function logOf(ip: string) {
+      const { rows } = await pg.query<{
+        event: string;
+        user_id: string | null;
+        session_id: string | null;
+        ip: string;
+        user_agent: string | null;
+        created_at: Date;
+      }>(
+        `select event, user_id, session_id, host(ip) as ip, user_agent, created_at
+           from auth.access_log where ip = $1::inet order by created_at, event`,
+        [ip],
+      );
+      return rows;
+    }
+
+    it('giriş, yenileme ve başarısız giriş: zaman, kullanıcı, oturum, gerçek IP, user agent', async () => {
+      const user = await createUser();
+      const ip = '203.0.113.51';
+      await tokenCall(ip, 'password', {
+        email: user.email,
+        password: 'yanlis',
+      }).expect(400);
+      await tokenCall(ip, 'password', {
+        email: 'hic.yok@a.test',
+        password: 'yanlis',
+      }).expect(400);
+      const ok = (
+        await tokenCall(ip, 'password', {
+          email: user.email,
+          password: SEED_PASSWORD,
+        }).expect(200)
+      ).body as TokenResponse;
+      await tokenCall(ip, 'refresh_token', {
+        refresh_token: ok.refresh_token,
+      }).expect(200);
+
+      const rows = await logOf(ip);
+      const sessionId = (jwt.decode(ok.access_token) as { session_id: string })
+        .session_id;
+      expect(rows.map((r) => ({ ...r, created_at: undefined }))).toEqual(
+        expect.arrayContaining([
+          {
+            event: 'password_failed',
+            user_id: user.id,
+            session_id: null,
+            ip,
+            user_agent: 'e2e-5651/1.0',
+          },
+          {
+            event: 'password_failed',
+            user_id: null,
+            session_id: null,
+            ip,
+            user_agent: 'e2e-5651/1.0',
+          },
+          {
+            event: 'password',
+            user_id: user.id,
+            session_id: sessionId,
+            ip,
+            user_agent: 'e2e-5651/1.0',
+          },
+          {
+            event: 'refresh',
+            user_id: user.id,
+            session_id: sessionId,
+            ip,
+            user_agent: 'e2e-5651/1.0',
+          },
+        ]),
+      );
+      expect(rows).toHaveLength(4);
+      // Kayıtta e-posta yok: tablonun sütunları bunlarla sınırlı.
+      const { rows: cols } = await pg.query<{ c: string }>(
+        `select column_name as c from information_schema.columns
+          where table_schema = 'auth' and table_name = 'access_log' order by 1`,
+      );
+      expect(cols.map((r) => r.c)).toEqual([
+        'created_at',
+        'event',
+        'id',
+        'ip',
+        'session_id',
+        'user_agent',
+        'user_id',
+      ]);
+    });
+
+    it('istek rollerine kapalı: anon, authenticated, service_role okuyamaz', async () => {
+      for (const role of ['anon', 'authenticated', 'service_role']) {
+        await pg.query('begin');
+        try {
+          await pg.query(`set local role ${role}`);
+          await expect(
+            pg.query('select count(*) from auth.access_log'),
+          ).rejects.toMatchObject({ code: '42501' });
+        } finally {
+          await pg.query('rollback');
+        }
+      }
+      const { rows } = await pg.query<{ rls: boolean; policies: string }>(
+        `select c.relrowsecurity as rls,
+                (select string_agg(policyname || ':' || cmd || ':' || array_to_string(roles, ','), ',')
+                   from pg_policies where schemaname = 'auth' and tablename = 'access_log') as policies
+           from pg_class c where c.oid = 'auth.access_log'::regclass`,
+      );
+      expect(rows[0]).toEqual({
+        rls: true,
+        policies: 'access_log_insert:INSERT:auth_service',
+      });
+    });
+
+    it('1 yıldan eski satırlar cron işinin fonksiyonuyla silinir', async () => {
+      const ip = '203.0.113.52';
+      await pg.query(
+        `insert into auth.access_log (created_at, event, ip)
+         values (now() - interval '1 year 1 day', 'password_failed', $1::inet),
+                (now() - interval '11 months', 'password_failed', $1::inet)`,
+        [ip],
+      );
+      const { rows } = await pg.query<{ n: number }>(
+        'select auth.purge_expired_access_log() as n',
+      );
+      expect(rows[0].n).toBeGreaterThanOrEqual(1);
+      expect(await logOf(ip)).toHaveLength(1);
+      const { rows: job } = await pg.query(
+        "select schedule, command from cron.job where jobname = 'backend_access_log_purge'",
+      );
+      expect(job).toEqual([
+        {
+          schedule: '15 1 * * *',
+          command: 'select auth.purge_expired_access_log()',
+        },
+      ]);
+    });
+  });
 });

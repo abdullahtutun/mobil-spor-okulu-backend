@@ -59,6 +59,13 @@ export interface ClientInfo {
   userAgent: string | null;
 }
 
+/**
+ * 5651 erişim kaydının olay türü (`auth.access_log.event`, 0010):
+ * oturum açan akış ya da başarısız parola girişi.
+ */
+export type AccessEvent =
+  'password' | 'otp' | 'invite' | 'refresh' | 'password_failed';
+
 const USER_COLUMNS = `
   id, aud, role, email, encrypted_password, email_confirmed_at, invited_at,
   confirmation_sent_at, recovery_sent_at, last_sign_in_at, raw_app_meta_data,
@@ -129,6 +136,32 @@ export class AuthRepository {
       [userId, client.userAgent, client.ip],
     );
     return rows[0];
+  }
+
+  /**
+   * 5651 erişim kaydı (0010). Yalnızca zaman, olay, kullanıcı/oturum kimliği,
+   * IP ve user agent; e-posta ya da token yazılmaz.
+   */
+  async insertAccessLog(
+    c: PoolClient,
+    entry: {
+      event: AccessEvent;
+      userId: string | null;
+      sessionId: string | null;
+      client: ClientInfo;
+    },
+  ): Promise<void> {
+    await c.query(
+      `insert into auth.access_log (event, user_id, session_id, ip, user_agent)
+       values ($1, $2, $3, $4::inet, $5)`,
+      [
+        entry.event,
+        entry.userId,
+        entry.sessionId,
+        entry.client.ip,
+        entry.client.userAgent,
+      ],
+    );
   }
 
   /** Oturumu kilitler (aynı oturumda eşzamanlı yenilemeler sıraya girer). */

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import {
+  type AccessEvent,
   AuthRepository,
   type ClientInfo,
   type SessionRow,
@@ -22,8 +23,9 @@ export interface SessionResponse {
 /**
  * Oturum açan her akışın ortak sonu (S05'te `signInWithPassword`'un içindeydi;
  * S06'nın verify uçları da kullanır): `last_sign_in_at`, yeni `auth.sessions`
- * satırı, ilk refresh token, access token ve yanıt. Çağıranın
- * transaction'ında (`asAuthService`) çalışır.
+ * satırı, ilk refresh token, 5651 erişim kaydı, access token ve yanıt.
+ * Çağıranın transaction'ında (`asAuthService`) çalışır: kayıt yazılamazsa
+ * oturum da açılmaz.
  */
 @Injectable()
 export class SessionOpener {
@@ -36,6 +38,7 @@ export class SessionOpener {
     c: PoolClient,
     user: UserRow,
     client: ClientInfo,
+    event: Exclude<AccessEvent, 'refresh' | 'password_failed'>,
   ): Promise<SessionResponse> {
     const lastSignIn = await this.repo.touchLastSignIn(c, user.id);
     const session = await this.repo.createSession(c, user.id, client);
@@ -45,6 +48,12 @@ export class SessionOpener {
       userId: user.id,
       sessionId: session.id,
       parent: null,
+    });
+    await this.repo.insertAccessLog(c, {
+      event,
+      userId: user.id,
+      sessionId: session.id,
+      client,
     });
     const fresh = { ...user, last_sign_in_at: lastSignIn };
     return this.respond(c, fresh, session, refresh.token);

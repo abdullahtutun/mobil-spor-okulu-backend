@@ -49,11 +49,15 @@ const NOT_YET_LIVE_FINGERPRINT: Partial<Record<string, string>> = {};
  * Yalnızca yeni backend'de olan, canlıya hiç gitmeyecek nesneler: S07'nin
  * okuma fonksiyonları (0007) ve S11'in gelen kutusu trigger'ı (0009: bir
  * fonksiyon, iki trigger). Fonksiyonların yorumu `backend:`, trigger'ların
- * adı `backend_` ile başlar; parmak izi onları dışarıda bırakır.
+ * adı `backend_` ile başlar; parmak izi onları dışarıda bırakır. 5651 erişim
+ * kaydının (0010) tablosu ve fonksiyonu auth şemasında, sayılara girmez;
+ * saklama işi `backend_access_log_purge` cron sayısına girer, parmak izine
+ * girmez.
  */
 const BACKEND_ONLY: Partial<Record<keyof typeof LIVE, number>> = {
   functions: 25,
   triggers: 2,
+  cronJobs: 1,
 };
 
 /** scripts/schema-fingerprint.sql'in canlıdaki sonucu (2026-11-23). */
@@ -254,7 +258,7 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
       });
     });
 
-    it('auth_service: yalnızca auth tabloları (0005 + 0006), public’e erişimi yok, bypassrls değil', async () => {
+    it('auth_service: yalnızca auth tabloları (0005 + 0006 + 0010), public’e erişimi yok, bypassrls değil', async () => {
       const { rows } = await client.query<{ t: string; p: string }>(
         `select table_schema || '.' || table_name as t,
                 string_agg(privilege_type, ',' order by privilege_type) as p
@@ -262,6 +266,8 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
           where grantee = 'auth_service' group by 1 order by 1`,
       );
       expect(rows).toEqual([
+        // 0010: 5651 erişim kaydı, yalnızca yazma.
+        { t: 'auth.access_log', p: 'INSERT' },
         { t: 'auth.identities', p: 'INSERT,SELECT,UPDATE' },
         { t: 'auth.one_time_tokens', p: 'DELETE,INSERT,SELECT,UPDATE' },
         { t: 'auth.otp_attempts', p: 'DELETE,INSERT,SELECT,UPDATE' },

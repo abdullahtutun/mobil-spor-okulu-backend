@@ -22,7 +22,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S12 | tamam | 2026-11-23 | `src/data-migration/` export (salt okunur tek anlık görüntü) / import (replica, cron durur, logo öneki) / verify (parmak izi, FK, sequence, dosya md5, giriş); iki konteynerli prova sıfır fark; `RUNBOOK-data.md` |
 | S13 | tamam | 2026-11-23 | Veli `migrate/own-backend`: `supabase_flutter` yerine `AuthSession` + `ApiClient` + `RealtimeClient`; 178 test, yerel backend + seed'e karşı uçtan uca veri kaynağı testi |
 | S14 | tamam | 2026-11-23 | Yönetim `migrate/own-backend`: auth akışları `AuthSession`'da, bütün `.rpc(` `ApiClient.rpc`'de; `.from`/storage/functions/realtime S15'e kadar Supabase istemcisinde (dal arada kullanılamaz); 1219 test + yerel backend'e karşı gerçek e-posta koduyla uçtan uca |
-| S15 | kısmen | 2026-11-23 | Yönetim `migrate/own-backend`: `supabase_flutter` çıktı (okumalar, storage, functions, realtime backend'de, yerel türler); site formu `/functions/site-lead`'e; 1235 test + iki e2e koşusu. Kalan: aydınlatma metni (kullanıcı kararı) |
+| S15 | tamam | 2026-11-25 | Yönetim `migrate/own-backend`: `supabase_flutter` çıktı (okumalar, storage, functions, realtime backend'de, yerel türler); site formu `/functions/site-lead`'e; 1235 test + iki e2e koşusu. Aydınlatma metni 2026-11-25 (sürüm iki uygulamada + site) |
 | S16 | kısmen | 2026-11-24 | Repo tarafı: girişte migration + parola (tini), güvenlik başlıkları, restic yedek/geri yükleme/aylık test + systemd, restore e2e, `docs/ops/{deploy,server-setup,backup}.md`. Kalan: sunucu/DNS/S3/sırlar kullanıcıda |
 | S17 | bekliyor | | |
 
@@ -37,12 +37,11 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
   DNS'in kimde olduğu; Coolify paneli alan adı; repo'nun Coolify'a erişimi
   (şu an git remote yok); ikinci lokasyon S3 (sağlayıcı/şehir) ve saklama
   (7 gün/4 hafta/6 ay); izleme aracı ve bildirim kanalı; prova verisi
-  provadan sonra silinsin mi; 5651 kararı (aşağıda).
-- **5651 / `auth.audit_log_entries`** (S05/S12/S16): yeni backend giriş
-  olaylarını tabloya yazmıyor, eski kayıtlar taşınmıyor; gizlilik politikası
-  §9 erişim kayıtlarını 1–2 yıl saklıyor. Karar kullanıcıda (öneri: eski
-  kayıtlar export'la şifreli arşiv, yeni backend'de giriş olayları için
-  küçük bir tablo + 1 yıl saklama — S17'den önce ayrı küçük iş).
+  provadan sonra silinsin mi. **Cevaplananlar (2026-11-25):** VPS
+  hosting.com.tr, Türkiye; yedekler şimdilik aynı VPS'te (restic yerel +
+  Coolify yerel, ikinci lokasyon yok); API `api.mobilsporokulu.com`
+  (Coolify/Traefik); izleme UptimeRobot (yalnızca `/health`); DNS
+  sağlayıcısı bilinmiyor; Supabase'teki veri yalnızca demo.
 - S02: 1.1.2+10 mağazaya ne zaman çıkacak? (kullanıcıda)
 - S02: iOS App Store adresleri (`app_min_versions.store_url`) S17'den önce
   yazılmalı.
@@ -50,14 +49,6 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
   (`send-push/data_params.ts`, kullanıcı onayıyla); dağıtım kullanıcıda:
   `supabase functions deploy send-push --no-verify-jwt`.
 - S16: Coolify'a girilecek sırlar kullanıcıdan: `FCM_SERVICE_ACCOUNT`, `IP_HASH_SALT`, `SITE_LEAD_NOTIFY_TO`, iki markanın SMTP kutusu (Supabase secrets'taki değerler; `deploy.md` §5).
-- S15: **aydınlatma metni** — gizlilik politikası (`assets/legal/privacy_policy_tr.md`,
-  hizmet sağlayıcılar tablosundaki "Supabase Pte. Ltd. … İsviçre (Zürih)"
-  satırı ve yurt dışı aktarım anlatımı; veli uygulamasında birebir kopyası),
-  sitenin iletişim formu aydınlatma metni ve `features.ts`'teki "veriler
-  Supabase altyapısında, İsviçre'de" cümleleri. Yeni metin barındırma
-  bilgisine (VPS sağlayıcısı/konumu, yedek deposu — S16 soruları) bağlı ve
-  kullanıcı onayı istiyor; onaylanınca iki uygulamada `PrivacyPolicy.version`
-  artırılır.
 
 VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
@@ -65,6 +56,44 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### 5651 erişim kaydı + aydınlatma metni (S15 kalanı) (2026-11-25)
+- Kullanıcı kararları (2026-11-25): VPS hosting.com.tr (Türkiye, şehir
+  belirtilmedi), yedekler aynı sağlayıcıda, ikinci lokasyon yok; izleme
+  UptimeRobot; yurt dışı hizmetler Firebase (push), Hostinger (e-posta),
+  UptimeRobot (kişisel veri yok); Supabase geçişten sonra kalkar; yeni
+  metin geçiş tamamlandığında geçerli, güncel metin olarak yazıldı.
+  **Supabase'teki veri yalnızca demo**: `auth.audit_log_entries`'in
+  arşivlenmesi (eski öneri) gerekmiyor, yapılmadı.
+- Backend: `0010_access_log.sql` — `auth.access_log` (zaman, olay
+  `password|otp|invite|refresh|password_failed`, kullanıcı/oturum kimliği,
+  IP, user agent; e-posta/token yok), RLS açık, tek politika
+  `auth_service` INSERT, istek rollerine yetki yok; `auth.purge_expired_access_log()`
+  + cron `backend_access_log_purge` (01:15 UTC, 1 yıl). Yazan yerler:
+  `SessionOpener.open` (oturumla aynı transaction), `AuthService.refresh`,
+  başarısız parola girişi (ayrı transaction, hata yanıtı değiştirmez).
+  auth şemasında olduğu için public parmak izleri değişmedi; fingerprint
+  betiği `backend_` cron işlerini dışarıda bırakıyor, `BACKEND_ONLY.cronJobs = 1`,
+  auth_service yetki listesine `auth.access_log: INSERT`, bildirim testinin
+  cron listesine yeni iş.
+- Aydınlatma metni (sürüm `2026-11-25`, yönetim + veli `migrate/own-backend`,
+  birebir kopya): Supabase satırı çıktı; barındırma Türkiye (hosting.com.tr),
+  yedekler aynı sağlayıcıda Türkiye'de şifreli; yurt dışı tablosu Firebase,
+  Hostinger (iki gönderici adresi), Apple/Google; UptimeRobot kişisel veri
+  almadan izleme; sağlık verisi yurt dışına çıkmıyor; erişim kayıtları 1
+  yıl (5651), işlem logları 1–2 yıl kaldı; **yedek satırı 30 gün → 6 ay**
+  (restic 7 gün / 4 hafta / 6 ay; eski metin bununla çelişiyordu).
+  Yürürlük tarihi 25.11.2026 yazıldı — geçiş günü farklıysa iki uygulamada
+  satır ve sürüm o güne çekilmeli. `tool/render_privacy_policy.dart` ve
+  testler değişiklik istemedi. Site: aydınlatma metni "Aktarım" bölümü,
+  `features.ts` (iki yer) ve `faq.ts` (bir yer) Türkiye'ye çevrildi.
+- Kabul: backend lint, typecheck, `npm test` 181, `npm run test:e2e` 693;
+  yönetim `flutter test` 1235 (analyze: hata yok), veli 178 (analyze: hata
+  yok); site `npm run build` (29 sayfa) + `npm test` 104.
+- Sonrakiler için: canlıya uygulanmayacak (yalnızca backend). Yedekler
+  ikinci lokasyona taşınırsa (yurt dışı S3 gibi) aydınlatma metni ve sürüm
+  değişir. Coolify'ın DB yedeği ve restic aynı VPS'te: disk kaybında ikisi
+  birden gider — ikinci lokasyon hâlâ açık iş.
 
 ### S16 — Üretim dağıtımı, yedekleme, izleme (2026-11-24)
 - Yapılanlar: oturum dosyasındaki teslim notuna ve `docs/ops/`'a bakın.

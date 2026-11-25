@@ -129,6 +129,12 @@ describe('Auth akışları: sıfırlama, kayıt, davet (gerçek Postgres)', () =
       ).body as SessionBody;
       expect(session.access_token).toBeTruthy();
       expect(session.user.email).toBe(email);
+      // 5651: kodla açılan oturum erişim kaydında (0010).
+      const { rows: logged } = await pg.query<{ event: string }>(
+        'select event from auth.access_log where user_id = $1',
+        [session.user.id],
+      );
+      expect(logged.map((r) => r.event)).toEqual(['otp']);
 
       await http()
         .put('/auth/user')

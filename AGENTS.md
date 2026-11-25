@@ -249,6 +249,15 @@ npm run db:migrate && npm run test:e2e
   whether the account exists. Keep it that way.
 - Passive accounts, roles and brands are **not** checked at login — that
   stays in the apps via `get_session_data`.
+- **5651 access log** (`auth.access_log`, 0010): every session opened
+  (`password`, `otp`, `invite` — in `SessionOpener.open`, same transaction),
+  every refresh (`refresh`) and every failed password sign-in
+  (`password_failed`, user id null for an unknown e-mail; a failed write is
+  logged, never changes the answer). Columns: time, event, user/session id,
+  IP (`TRUST_PROXY`), user agent — never the e-mail or a token. RLS on, the
+  only policy is `auth_service`'s INSERT, no grants for request roles; kept
+  1 year (`backend_access_log_purge`, 01:15 UTC). It lives in `auth` and the
+  cron job is `backend_`-prefixed so the live fingerprints stay unchanged.
 
 ## Auth flows and e-mail (S06)
 
