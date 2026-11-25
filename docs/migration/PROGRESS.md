@@ -24,7 +24,7 @@ oturum dosyasında işaretli) · `tamam`.
 | S14 | tamam | 2026-11-23 | Yönetim `migrate/own-backend`: auth akışları `AuthSession`'da, bütün `.rpc(` `ApiClient.rpc`'de; `.from`/storage/functions/realtime S15'e kadar Supabase istemcisinde (dal arada kullanılamaz); 1219 test + yerel backend'e karşı gerçek e-posta koduyla uçtan uca |
 | S15 | tamam | 2026-11-25 | Yönetim `migrate/own-backend`: `supabase_flutter` çıktı (okumalar, storage, functions, realtime backend'de, yerel türler); site formu `/functions/site-lead`'e; 1235 test + iki e2e koşusu. Aydınlatma metni 2026-11-25 (sürüm iki uygulamada + site) |
 | S16 | kısmen | 2026-11-24 | Repo tarafı: girişte migration + parola (tini), güvenlik başlıkları, restic yedek/geri yükleme/aylık test + systemd, restore e2e, `docs/ops/{deploy,server-setup,backup}.md`. Kalan: sunucu/DNS/S3/sırlar kullanıcıda |
-| S17 | bekliyor | | |
+| S17 | kısmen | 2026-11-25 | Hazırlık bitti: `RUNBOOK-cutover.md`, dallar `main`'de (Y/V/site), sürüm 1.1.3+11, yedek 30 gün. Geçiş kullanıcıda |
 
 ## Açık sorular
 
@@ -42,7 +42,6 @@ Cevaplanınca buradan silinip ilgili oturumun günlüğüne yazılır.
   Coolify yerel, ikinci lokasyon yok); API `api.mobilsporokulu.com`
   (Coolify/Traefik); izleme UptimeRobot (yalnızca `/health`); DNS
   sağlayıcısı bilinmiyor; Supabase'teki veri yalnızca demo.
-- S02: 1.1.2+10 mağazaya ne zaman çıkacak? (kullanıcıda)
 - S02: iOS App Store adresleri (`app_min_versions.store_url`) S17'den önce
   yazılmalı.
 - S11: send-push `data` sızıntısı yönetim reposunda düzeltildi
@@ -56,6 +55,38 @@ VPS'te Coolify kurulu (2026-10-26) → PLAN.md K15, S16 buna göre yazıldı.
 
 En yeni en üstte. Her oturum bir bölüm ekler: ne yapıldı, plandan sapmalar,
 sonraki oturumların bilmesi gerekenler.
+
+### S17 — Geçiş hazırlığı (2026-11-25)
+- Kullanıcı (2026-11-25): Supabase verisi demo, mağaza uygulamalarını
+  kimse kullanmıyor → ayrı prova, bakım duyurusu, eski auth log arşivi yok;
+  Supabase yeni sistem doğrulanınca silinebilir. Üretim API'si canlı
+  (`api.mobilsporokulu.com`, DB'de yalnızca şema); yedekler Coolify yerel
+  (7 kopya) + restic yerel; saklama **30 gün** seçildi.
+- Yedek: `backup.sh` `restic forget --keep-within ${KEEP_WITHIN:-30d}`
+  (KEEP_DAILY/WEEKLY/MONTHLY kalktı, okunmuyor); `backup.env.example`
+  yerel depoyu varsayılan yaptı; `docs/ops/backup.md` bugünkü kuruluma
+  göre yeniden yazıldı (§6: S3 ikinci lokasyon sonraki iş). Aydınlatma
+  metni §9 yedek satırı "en fazla 30 gün" (Y+V birebir, sürüm aynı);
+  sitede yedek süresi geçmiyor.
+- `RUNBOOK-cutover.md`: Supabase cron (`update cron.job set active=false`)
+  ve push dürtmesi (Vault `push_dispatch_url` adını değiştirerek) SQL'leri,
+  veri aracı API konteynerinde `docker exec` ile (`/tmp/exports`,
+  `MIGRATE_ON_START`'a dokunulmaz), smoke, web paketleri, mağaza
+  sürümleri, kapı sırası, geri alma, Supabase silme.
+- **Kapı:** 1.1.2+10 Supabase'e, 1.1.3+11 yeni backend'e sorar. Import
+  `app_min_versions`'ı Supabase değeriyle günceller → Supabase'te
+  `min_build = 11` **en son** (mağaza yayınından sonra), yeni DB'de ≤ 11.
+- Dallar `main`'e alındı (yerel, push yok): yönetim (main'deki a05d103 ile
+  birleştirme, çakışma yok), veli ve site ileri sarma. Sürüm 1.1.3+11
+  (iki uygulama). AGENTS.md'lerin başına backend notu; `supabase/` salt
+  okunur `supabase/README.md` ile kalır, Supabase kapanınca silinir;
+  AGENTS.md'deki Supabase bölümlerinin ayıklanması sonraya.
+- Kabul: dalda Y `flutter test` 1235, V 178, site build 29 sayfa + 104;
+  `main`'de birleştirmeden sonra Y 1243, V 178, site 104; analyze iki
+  uygulamada hata yok (Y 46 uyarı/info, V 3 info — öncekiyle aynı tür).
+  Backend: lint temiz, `npm test` 181, `npm run test:e2e` 693. Allow-list
+  e2e testi artık `ApiClient.read(xRpc)` ve `fetchAllRpc(api, xRpc)`
+  çağrılarını da tanıyor (yönetim `main`'e alınınca 25 okuma "yetim" görünüyordu).
 
 ### 5651 erişim kaydı + aydınlatma metni (S15 kalanı) (2026-11-25)
 - Kullanıcı kararları (2026-11-25): VPS hosting.com.tr (Türkiye, şehir

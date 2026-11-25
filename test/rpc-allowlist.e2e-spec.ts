@@ -48,6 +48,16 @@ function rpcNamesOf(lib: string): string[] {
       if (!name) throw new Error(`${file}: .rpc(${arg}) çözülemedi`);
       names.add(name);
     }
+    // S15: okuma fonksiyonları `ApiClient.read(xRpc)` ve
+    // `PagedQuery.fetchAllRpc(api, xRpc)` ile de çağrılır (`ref.read(...)`
+    // ile karışmasın diye yalnızca `…Rpc` sabitleri).
+    for (const m of source.matchAll(
+      /(?:\.read|fetchAllRpc)\(\s*(?:\w+\s*,\s*)?(\w+Rpc)\b/g,
+    )) {
+      const name = constants.get(m[1]);
+      if (!name) throw new Error(`${file}: ${m[1]} çözülemedi`);
+      names.add(name);
+    }
   }
   return [...names].sort();
 }

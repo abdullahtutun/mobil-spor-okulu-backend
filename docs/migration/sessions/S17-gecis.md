@@ -16,7 +16,7 @@ bir bakım penceresiyle geçmek; sonra Supabase'i güvenle kapatmak.
   taşındıktan sonra Supabase'te yazım olmamalı zaten). Yönetim reposundaki
   send-push'un `data`'sına kişisel veri sızıyor (`names`, `athlete_name`) —
   backend'de düzeltildi; canlıda da düzeltilmesi önerildi (PROGRESS, S11).
-- [ ] `docs/migration/RUNBOOK-cutover.md`: dakika dakika plan, her adımın
+- [x] `docs/migration/RUNBOOK-cutover.md` (2026-11-25; demo veri → prova/duyuru yok): dakika dakika plan, her adımın
       sahibi, doğrulama komutu ve geri alma noktası. İçermesi gerekenler:
   - **Önce (T-1 hafta):** S02 kapısının yaygınlığı (kaç kullanıcı kapılı
     sürümde); yeni uygulama sürümleri `migrate/own-backend` dalından build
@@ -35,11 +35,11 @@ bir bakım penceresiyle geçmek; sonra Supabase'i güvenle kapatmak.
   - **Sonra:** 24 saat yakından izleme; Supabase projesi birkaç hafta yalnızca
     güncelleme kapısı için açık kalır, sonra veri ve proje silinir
     (KVKK: taşınan verinin eski kopyası tutulmaz); export dosyaları silinir.
-- [ ] Geçiş dallarının (`migrate/own-backend`) `main`'e alınması.
-- [ ] Yönetim reposundaki `supabase/` klasörünün akıbeti (arşiv ya da silme)
+- [x] Geçiş dallarının (`migrate/own-backend`) `main`'e alınması (yönetim, veli, site; yerel, push yok).
+- [x] Yönetim reposundaki `supabase/` klasörünün akıbeti (karar: salt okunur `supabase/README.md` ile kalır, Supabase kapanınca silinir) (arşiv ya da silme)
       ve migration'ların bundan sonra yalnızca backend reposunda olduğu
       `AGENTS.md`'lere.
-- [ ] Prova: runbook'u baştan sona provada uygula, süreleri ve sorunları
+- [x] ~~Prova~~ — gerekmiyor (kullanıcı 2026-11-25: veri demo). Eski madde: runbook'u baştan sona provada uygula, süreleri ve sorunları
       günlüğe yaz, runbook'u düzelt.
 - [ ] Canlıya geçiş: kullanıcıyla birlikte, kullanıcının belirlediği gün.
 
@@ -49,7 +49,11 @@ bir bakım penceresiyle geçmek; sonra Supabase'i güvenle kapatmak.
   akışlar çalışıyor, push ve e-posta gidiyor, ilk gece cron işleri hatasız.
 
 ## Teslim notu
-_(oturum sonunda doldurulur)_
+**Hazırlık (2026-11-25), geçiş kullanıcıda.** Runbook yazıldı; dallar
+`main`'de; sürüm iki uygulamada 1.1.3+11; AGENTS.md'lerde backend notu;
+yedek saklama 30 gün (restic `--keep-within 30d`), aydınlatma metni "en
+fazla 30 gün" (sürüm 2026-11-25 değişmedi). Kalan: runbook adımları
+(mağaza build'leri → geçiş günü 1–13 → Supabase silme).
 
 > **S12'den:** veri adımı `docs/migration/RUNBOOK-data.md` (export → import
 > `--storage-prefix <API>/storage/` → verify → resume-cron → API aç → export
