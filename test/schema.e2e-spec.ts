@@ -47,15 +47,15 @@ const NOT_YET_LIVE_FINGERPRINT: Partial<Record<string, string>> = {};
 
 /**
  * Yalnızca yeni backend'de olan, canlıya hiç gitmeyecek nesneler: S07'nin
- * okuma fonksiyonları (0007) ve S11'in gelen kutusu trigger'ı (0009: bir
- * fonksiyon, iki trigger). Fonksiyonların yorumu `backend:`, trigger'ların
+ * okuma fonksiyonları (0007), S11'in gelen kutusu trigger'ı (0009: bir
+ * fonksiyon, iki trigger) ve toplu tahsil (0011: collect_financial_records). Fonksiyonların yorumu `backend:`, trigger'ların
  * adı `backend_` ile başlar; parmak izi onları dışarıda bırakır. 5651 erişim
  * kaydının (0010) tablosu ve fonksiyonu auth şemasında, sayılara girmez;
  * saklama işi `backend_access_log_purge` cron sayısına girer, parmak izine
  * girmez.
  */
 const BACKEND_ONLY: Partial<Record<keyof typeof LIVE, number>> = {
-  functions: 25,
+  functions: 26,
   triggers: 2,
   cronJobs: 1,
 };
@@ -415,6 +415,72 @@ describe('Veritabanı tabanı (S03, gerçek Postgres)', () => {
       const sql = `select count(*)::int as v from public.financial_records where school_id = '${SCHOOL_A}'`;
       expect(await asUser<number>(USERS.a.accountant, sql)).toBe(3);
       expect(await asUser<number>(USERS.a.coach, sql)).toBe(0);
+    });
+  });
+
+  describe('toplu tahsil (0011 collect_financial_records)', () => {
+    const UNPAID = 'f0000000-0000-4000-8000-000000000102';
+    const PARTIAL = 'f0000000-0000-4000-8000-000000000103';
+    const PAID = 'f0000000-0000-4000-8000-000000000101';
+
+    /** Çağrı + ardından okuma aynı transaction'da; sonunda geri alınır. */
+    async function collectThenRead(
+      user: string,
+      ids: string[],
+    ): Promise<{
+      r: { code: string; data: unknown };
+      statuses: Record<string, string>;
+    }> {
+      await client.query('begin');
+      try {
+        await client.query('set local role authenticated');
+        await client.query(
+          "select set_config('request.jwt.claims', $1, true)",
+          [JSON.stringify({ sub: user, role: 'authenticated' })],
+        );
+        const { rows } = await client.query<{
+          r: { code: string; data: unknown };
+        }>("select public.collect_financial_records($1::uuid[], 'cash') as r", [
+          ids,
+        ]);
+        await client.query('reset role');
+        const st = await client.query<{ id: string; status: string }>(
+          'select id::text, status::text from public.financial_records where id = any($1::uuid[])',
+          [[UNPAID, PARTIAL, PAID]],
+        );
+        return {
+          r: rows[0].r,
+          statuses: Object.fromEntries(st.rows.map((x) => [x.id, x.status])),
+        };
+      } finally {
+        await client.query('rollback');
+      }
+    }
+
+    it('kalan tutarları tahsil eder, taksitler ödendi olur', async () => {
+      const { r, statuses } = await collectThenRead(USERS.a.accountant, [
+        UNPAID,
+        PARTIAL,
+      ]);
+      expect(r.code).toBe('ok');
+      expect(r.data).toEqual({ count: 2, total_amount: 2250 });
+      expect(statuses[UNPAID]).toBe('paid');
+      expect(statuses[PARTIAL]).toBe('paid');
+    });
+
+    it('ödenmiş bir taksit varsa hiçbirini kapatmaz', async () => {
+      const { r, statuses } = await collectThenRead(USERS.a.accountant, [
+        UNPAID,
+        PAID,
+      ]);
+      expect(r.code).toBe('conflict');
+      expect(statuses[UNPAID]).toBe('unpaid');
+    });
+
+    it('finans yetkisi olmayan reddedilir', async () => {
+      const { r, statuses } = await collectThenRead(USERS.a.coach, [UNPAID]);
+      expect(r.code).toBe('forbidden');
+      expect(statuses[UNPAID]).toBe('unpaid');
     });
   });
 });

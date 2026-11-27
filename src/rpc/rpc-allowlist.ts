@@ -117,6 +117,7 @@ export const RPC_ALLOWLIST: Readonly<Record<string, RpcAllowEntry>> = {
   create_athlete: { callers: USER, apps: ['Y'] },
   create_branch: { callers: USER, apps: ['Y'] },
   create_class: { callers: USER, apps: ['Y'] },
+  collect_financial_records: { callers: USER, apps: ['Y'] },
   create_customer: { callers: USER, apps: ['Y'] },
   create_discount: { callers: USER, apps: ['Y'] },
   create_income_expense_item: { callers: USER, apps: ['Y'] },
